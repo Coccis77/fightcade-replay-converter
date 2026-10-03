@@ -32,3 +32,11 @@ Conclusion: the spec's capture approach (FBNeo native AVI writer under Wine on m
 | End of replay | Stream does NOT send DISCONNECTED at the end: emulator idles waiting for input, so the dump simply stops growing → stall detection works; `QuarkFinishReplay` hook kept for real disconnects | file mtimes |
 | Disk | raw dump ≈ 20 MB/s of replay (2.8 GB for 138 s) — pipe to ffmpeg or encode while dumping to avoid this | sizes |
 | Quark suffix | `.7` suffix from the client was used; behaviour without it untested | — |
+
+## Spike 3 (2026-10-03): Linux build, Linux run, Windows run
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Emulator builds on Linux? | **Yes** (Debian bookworm amd64, mingw-w64 GCC 12). Needs a host `g++` (generators) and a case fix: sources include `InitGuid.h`, mingw ships `initguid.h` (macOS is case-insensitive). Spike used a shim header via `CPLUS_INCLUDE_PATH`; build.py should create it. build.py also crashes with a traceback (not a clean error) when a tool is missing. | docker build |
+| Runs under Linux Wine + Xvfb? | **Inconclusive.** On Apple Silicon, Docker runs 32-bit x86 through QEMU (Rosetta can't run i386): 0 frames after 15 min. Also seen: no `libGL` (Wine OpenGL disabled) and no sound card (ALSA errors) in the image — both need headless fixes (Mesa, dummy audio). Needs real x86_64 Linux. | ps shows qemu-i386 |
+| Runs natively on Windows? | **Yes.** Windows 11, Ryzen 9 5900X, same exe built on macOS: exit 0 by itself after 38 s, 8220 frames, video 137.943 s / audio 137.932 s — identical to macOS. `d3dx9_43.dll` present (installed with Fightcade/DirectX). | user-run script |
