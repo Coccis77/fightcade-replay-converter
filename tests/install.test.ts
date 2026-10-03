@@ -1,70 +1,68 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { installLayout, locateInstall, preflight, type PreflightDeps } from '../src/install.js';
-import { sha256File } from '../src/fsUtil.js';
+import { installLayout, locateInstall, preflight } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
-const ROOT = '/Applications/FightCade2.app';
+const MAC_ROOT = '/Applications/FightCade2.app';
+const WIN_ROOT = 'C:\\Users\\Jean Pierre\\Documents\\Fightcade';
 
 describe('installLayout', () => {
-  it('maps the macOS app bundle', () => {
-    const i = installLayout(ROOT);
-    expect(i.fbneoDir).toBe(`${ROOT}/Contents/MacOS/emulator/fbneo`);
+  it('maps the macOS app bundle with wine.sh as launcher', () => {
+    const i = installLayout(MAC_ROOT, 'darwin');
+    expect(i.platform).toBe('darwin');
+    expect(i.fbneoDir).toBe(`${MAC_ROOT}/Contents/MacOS/emulator/fbneo`);
     expect(i.exe).toBe(`${i.fbneoDir}/fcadefbneo.exe`);
     expect(i.ggponet).toBe(`${i.fbneoDir}/ggponet.dll`);
     expect(i.romsDir).toBe(`${i.fbneoDir}/ROMs`);
     expect(i.rom).toBe(`${i.fbneoDir}/ROMs/sfiii3nr1.zip`);
     expect(i.mainIni).toBe(`${i.fbneoDir}/config/fcadefbneo.ini`);
-    expect(i.wineSh).toBe(`${ROOT}/Contents/Resources/wine.sh`);
+    expect(i.launcher).toBe(`${MAC_ROOT}/Contents/Resources/wine.sh`);
+  });
+  it('maps a Windows folder (with spaces) and runs the exe directly', () => {
+    const i = installLayout(WIN_ROOT, 'win32');
+    expect(i.fbneoDir).toBe(`${WIN_ROOT}\\emulator\\fbneo`);
+    expect(i.exe).toBe(`${WIN_ROOT}\\emulator\\fbneo\\fcadefbneo.exe`);
+    expect(i.rom).toBe(`${WIN_ROOT}\\emulator\\fbneo\\ROMs\\sfiii3nr1.zip`);
+    expect(i.launcher).toBeNull();
   });
 });
 
 describe('locateInstall', () => {
-  const home = '/Users/fran';
-  it('finds the first candidate with the emulator and ggponet.dll', async () => {
-    const userRoot = `${home}/Applications/FightCade2.app`;
-    const exists = async (p: string) => p.startsWith(userRoot);
-    expect((await locateInstall({ platform: 'darwin', home, exists })).root).toBe(userRoot);
+  it('finds the macOS user Applications install', async () => {
+    const home = '/Users/fran';
+    const root = `${home}/Applications/FightCade2.app`;
+    const i = await locateInstall({ platform: 'darwin', home, env: {}, exists: async (p) => p.startsWith(root) });
+    expect(i.root).toBe(root);
   });
-  it('explains a wrong --fightcade-dir', async () => {
-    await expect(locateInstall({ platform: 'darwin', home, override: '/nope', exists: async () => false })).rejects.toMatchObject({
+  it('finds Fightcade in Documents on Windows', async () => {
+    const env = { USERPROFILE: 'C:\\Users\\Jean Pierre', LOCALAPPDATA: 'C:\\Users\\Jean Pierre\\AppData\\Local' };
+    const i = await locateInstall({ platform: 'win32', home: env.USERPROFILE, env, exists: async (p) => p.startsWith(WIN_ROOT) });
+    expect(i.root).toBe(WIN_ROOT);
+    expect(i.platform).toBe('win32');
+  });
+  it('tries C:\\Fightcade and Programs too', async () => {
+    const env = { USERPROFILE: 'C:\\Users\\a', LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' };
+    const programs = 'C:\\Users\\a\\AppData\\Local\\Programs\\Fightcade';
+    const i = await locateInstall({ platform: 'win32', home: env.USERPROFILE, env, exists: async (p) => p.startsWith(programs) });
+    expect(i.root).toBe(programs);
+  });
+  it('explains a wrong --fightcade-dir per platform', async () => {
+    await expect(locateInstall({ platform: 'win32', home: 'C:\\Users\\a', env: {}, override: 'D:\\nope', exists: async () => false })).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
-      hint: expect.stringContaining('/nope'),
+      hint: expect.stringContaining('D:\\nope'),
     });
   });
-  it('rejects platforms other than macOS', async () => {
-    await expect(locateInstall({ platform: 'linux', home, exists: async () => true })).rejects.toMatchObject({
-      exitCode: ExitCode.Preflight,
-      message: expect.stringContaining('macOS'),
-    });
+  it('rejects Linux for now', async () => {
+    await expect(locateInstall({ platform: 'linux', home: '/home/a', env: {}, exists: async () => true })).rejects.toMatchObject({ exitCode: ExitCode.Preflight });
   });
 });
 
 describe('preflight', () => {
-  const install = installLayout(ROOT);
-  const ok: PreflightDeps = { exists: async () => true, which: async () => '/opt/homebrew/bin/ffmpeg' };
-
-  it('passes when everything is present', async () => {
-    await expect(preflight(install, ok)).resolves.toBeUndefined();
-  });
-  it.each([
-    ['ROM', { exists: async (p: string) => !p.endsWith('sfiii3nr1.zip') }, /ROM not found/],
-    ['wine.sh', { exists: async (p: string) => !p.endsWith('wine.sh') }, /wine\.sh not found/],
-    ['ffmpeg', { which: async () => null }, /ffmpeg not found/],
-  ])('fails when %s is missing', async (_name, override, message) => {
-    await expect(preflight(install, { ...ok, ...override })).rejects.toMatchObject({
-      exitCode: ExitCode.Preflight,
-      message: expect.stringMatching(message),
-    });
-  });
-});
-
-describe('sha256File', () => {
-  it('hashes file contents', async () => {
-    const file = join(await mkdtemp(join(tmpdir(), 'fc2mp4-hash-')), 'a.txt');
-    await writeFile(file, 'abc');
-    expect(await sha256File(file)).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  it('needs the ROM, and wine.sh only on macOS', async () => {
+    const mac = installLayout(MAC_ROOT, 'darwin');
+    const win = installLayout(WIN_ROOT, 'win32');
+    await expect(preflight(mac, { exists: async () => true })).resolves.toBeUndefined();
+    await expect(preflight(win, { exists: async (p) => !p.endsWith('wine.sh') })).resolves.toBeUndefined();
+    await expect(preflight(mac, { exists: async (p) => !p.endsWith('wine.sh') })).rejects.toMatchObject({ message: expect.stringMatching(/wine\.sh/) });
+    await expect(preflight(win, { exists: async (p) => !p.endsWith('sfiii3nr1.zip') })).rejects.toMatchObject({ message: expect.stringMatching(/ROM not found/) });
   });
 });

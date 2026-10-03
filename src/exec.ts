@@ -30,8 +30,8 @@ export const run: RunFn = (cmd, args, opts = {}) =>
     });
   });
 
-export async function which(cmd: string): Promise<string | null> {
-  const result = await run('which', [cmd]).catch(() => null);
+export async function which(cmd: string, platform: NodeJS.Platform = process.platform): Promise<string | null> {
+  const result = await run(platform === 'win32' ? 'where' : 'which', [cmd]).catch(() => null);
   if (!result || result.code !== 0) return null;
-  return result.stdout.trim() || null;
+  return result.stdout.split(/\r?\n/)[0]!.trim() || null;
 }

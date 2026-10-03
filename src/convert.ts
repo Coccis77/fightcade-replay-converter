@@ -3,12 +3,12 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
 import { defaultEmulatorPaths, defaultEnsureDeps, ensureEmulator, type EnsureResult } from './emulatorBuild.js';
-import { which } from './exec.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
 import { acquireLock } from './lock.js';
 import { resolveOutputPath } from './outputPath.js';
+import { appPaths, supportedPlatform } from './platform.js';
 import { parseReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
 
@@ -51,12 +51,14 @@ export interface ConvertDeps {
 
 export function defaultDeps(): ConvertDeps {
   const home = homedir();
-  const paths = defaultEmulatorPaths(home);
+  const platform = supportedPlatform(process.platform);
+  const app = appPaths(platform, home, process.env);
+  const paths = { ...defaultEmulatorPaths(home), runtimeDir: app.runtimeDir, sourceDir: app.sourceDir };
   return {
-    locateInstall: (override) => locateInstall({ platform: process.platform, home, override, exists: pathExists }),
-    resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, home),
+    locateInstall: (override) => locateInstall({ platform: process.platform, home, env: process.env, override, exists: pathExists }),
+    resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
-    preflight: (install) => preflight(install, { exists: pathExists, which }),
+    preflight: (install) => preflight(install, { exists: pathExists }),
     ensureEmulator: (install, force) => ensureEmulator(force, defaultEnsureDeps(install, paths)),
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, paths.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),

@@ -154,13 +154,13 @@ export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string
       });
     },
     startEmulator: (env) => {
-      const child = spawn(install.wineSh, [join(runtimeDir, EMULATOR_EXE), streamArg(quarkId)], {
+      const child = spawn(install.launcher!, [join(runtimeDir, EMULATOR_EXE), streamArg(quarkId)], {
         cwd: runtimeDir,
         env: { ...process.env, ...env },
         stdio: 'ignore',
       });
       return wrap(child, async () => {
-        await run(install.wineSh, ['taskkill', '/IM', EMULATOR_EXE, '/F'], { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs });
+        await run(install.launcher!, ['taskkill', '/IM', EMULATOR_EXE, '/F'], { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs });
         child.kill('SIGKILL');
       });
     },
