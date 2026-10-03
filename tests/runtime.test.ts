@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { setIniValue } from '../src/iniPatch.js';
-import { prepareRuntime, runtimeIni } from '../src/runtime.js';
+import { prepareRuntime, romsLinkType, runtimeIni } from '../src/runtime.js';
 import { installLayout } from '../src/install.js';
 
 describe('setIniValue', () => {
@@ -62,5 +62,12 @@ describe('prepareRuntime', () => {
 
     await prepareRuntime(install, runtime, true);
     expect(await readFile(join(runtime, 'ggponet.dll'), 'utf8')).toBe('new');
+  });
+});
+
+describe('romsLinkType', () => {
+  it('uses a junction on Windows (no admin rights needed) and a symlink on macOS', () => {
+    expect(romsLinkType('win32')).toBe('junction');
+    expect(romsLinkType('darwin')).toBe('dir');
   });
 });

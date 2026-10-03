@@ -4,9 +4,14 @@ import { EMULATOR_EXE, RUNTIME_INI } from './constants.js';
 import { pathExists } from './fsUtil.js';
 import { setIniValue } from './iniPatch.js';
 import type { FightcadeInstall } from './install.js';
+import type { Platform } from './platform.js';
 
 // FBNeo reads config/<exe name>.ini (CreateConfigName in cona.cpp).
 export const RUNTIME_INI_NAME = EMULATOR_EXE.replace(/\.exe$/i, '.ini');
+
+export function romsLinkType(platform: Platform): 'junction' | 'dir' {
+  return platform === 'win32' ? 'junction' : 'dir';
+}
 
 export function runtimeIni(base: string): string {
   return RUNTIME_INI.reduce((text, [key, value]) => setIniValue(text, key, value), base);
@@ -29,7 +34,7 @@ export async function prepareRuntime(install: FightcadeInstall, runtimeDir: stri
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
-  await symlink(install.romsDir, romsLink);
+  await symlink(install.romsDir, romsLink, romsLinkType(install.platform));
 
   const base = (await pathExists(install.mainIni)) ? await readFile(install.mainIni, 'latin1') : '';
   await writeFile(join(runtimeDir, 'config', RUNTIME_INI_NAME), runtimeIni(base), 'latin1');
