@@ -47,6 +47,12 @@ v0.2.97.44-55):
   `config/games/sfiii3nr1.ini`. Keyboard bindings use DirectInput scan codes
   (e.g. `switch 0x46` = Scroll Lock).
 - Native resolution is 384×224, displayed at 4:3 on original hardware (non-square pixels).
+- `bAutoPause 1` is set by default: FBNeo pauses when its window loses focus, so it must be patched
+  to `0` for unattended capture. The window title starts with `Fightcade FBNeo v`.
+- The AVI file name pattern `%s_%X.avi` suggests FBNeo splits recordings into several segments
+  (uncompressed 384×224@60 is roughly 15 MB/s). The pipeline handles a list of segments (joined
+  with ffmpeg's concat demuxer), and preflight checks free disk space.
+- Wine ships `taskkill`, used to stop the emulator (`wine.sh taskkill /IM fcadefbneo.exe /F`).
 
 Unknown, to be resolved by the spike (§9): the `quark:stream` port, whether the stream starts
 without the Fightcade client running, end-of-replay behaviour, FFWD behaviour in stream mode and
@@ -77,11 +83,11 @@ TypeScript on Node. The CLI is a thin shell over `convert(ref, options, onProgre
 |---|---|---|
 | `parseReplayRef` | link/ID → `{ game, quarkId }`; rejects non-`sfiii3nr1` | nothing (pure) |
 | `FightcadeInstall` | locate install (default macOS/Windows paths or `--fightcade-dir`), expose paths to exe, ini files, `avi/`, ROM; preflight checks | filesystem |
-| `ConfigPatcher` | back up and patch `fcadefbneo.ini` / `games/sfiii3nr1.ini` (FFWD binding, `bAlwaysProcessKeyboardInput 1`, AVI settings); restore; recover from a stale `.bak` | filesystem |
+| `ConfigPatcher` | back up and patch `fcadefbneo.ini` / `games/sfiii3nr1.ini` (`bAutoPause 0`, `bAlwaysProcessKeyboardInput 1`, `nAvi3x 1`, FFWD binding); restore; recover from a stale `.bak` | filesystem |
 | `EmulatorRunner` | spawn the emulator with `quark:stream`, via `wine.sh` on macOS or natively on Windows; wait for the window; kill the process tree | `FightcadeInstall`, `FbneoCtl` |
 | `FbneoCtl` | TypeScript wrapper that runs the `fbneo-ctl.exe` helper | helper exe |
 | `RecordingWatcher` | find the new AVI, track growth, decide when the replay has ended | filesystem, clock |
-| `Transcoder` | build and run the ffmpeg command, AVI → MP4; optional trimming of dead time | ffmpeg |
+| `Transcoder` | build and run the ffmpeg command, AVI segment(s) → MP4 (encoded to `.part.mp4`, then renamed); optional trimming of dead time | ffmpeg |
 | `convert()` | orchestrate, lock, clean up, report progress | all of the above |
 
 ### 4.1 `fbneo-ctl.exe` helper
@@ -134,6 +140,7 @@ frames and trailing frozen frames with ffmpeg `blackdetect` / `freezedetect`.
 
 ## 7. Error handling
 
+- Preflight also checks the ROM, the game config, `wine.sh`, ffmpeg and free disk space.
 - Preflight errors include a fix hint (e.g. "ffmpeg not found → `brew install ffmpeg`").
 - A lock file prevents concurrent runs. The run refuses to start if an `fcadefbneo.exe` process
   is already running.
@@ -167,6 +174,8 @@ spec is updated before the remaining tasks start.
    focus)? Is it honoured in stream mode? Does the AVI keep every frame (frame count ≈ duration
    × 59.6) and continuous audio? Measured speedup.
 6. What happens at the end of a stream (exit / title / freeze / message)?
+7. Whether and where the AVI splits into segments; bytes per second (sets the free-space threshold);
+   whether `wine.sh taskkill` stops the emulator cleanly.
 
 If FFWD fails any check, v1 ships with real-time capture (FFWD stays behind a flag for later).
 
