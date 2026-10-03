@@ -6,6 +6,7 @@ import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
+import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
 import { acquireLock } from './lock.js';
@@ -42,12 +43,13 @@ export interface ConvertDeps {
   resolveOutput(quarkId: string, output?: string): Promise<string>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
+  locateFfmpeg(install: FightcadeInstall): Promise<string>;
   ensureEmulator(install: FightcadeInstall, force: boolean): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   makeTempDir(): Promise<string>;
-  capture(install: FightcadeInstall, quarkId: string, opts: CaptureOptions): Promise<CaptureResult>;
+  capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
-  mux(args: { video: string; audio: string; output: string }): Promise<void>;
+  mux(args: { video: string; audio: string; output: string }, ffmpeg: string): Promise<void>;
   removeDir(dir: string): Promise<void>;
 }
 
@@ -60,6 +62,7 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists }),
+    locateFfmpeg: () => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform)),
     ensureEmulator: async (install, force) => {
       const dir = emulatorDir();
       const hash = await currentPatchSetHash(emulatorDir);
@@ -71,11 +74,11 @@ export function defaultDeps(): ConvertDeps {
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
-    capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, 'ffmpeg'), opts),
+    capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
     },
-    mux,
+    mux: (args, ffmpeg) => mux(args, ffmpeg),
     removeDir: (dir) => rm(dir, { recursive: true, force: true }),
   };
 }
@@ -93,6 +96,8 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
   let dir: string | undefined;
   try {
     await deps.preflight(install);
+    const ffmpeg = await deps.locateFfmpeg(install);
+    debug(`ffmpeg: ${ffmpeg}`);
     options.onProgress?.({ phase: 'preparing-emulator' });
     const ensured = await deps.ensureEmulator(install, false);
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
@@ -101,7 +106,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });
-    const captured = await deps.capture(install, ref.quarkId, {
+    const captured = await deps.capture(install, ref.quarkId, ffmpeg, {
       dir,
       scale: options.scale,
       maxDurationMs: options.maxDurationMs,
@@ -112,7 +117,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
 
     options.onProgress?.({ phase: 'finalizing' });
     await deps.mkdir(dirname(output));
-    await deps.mux({ video: captured.video, audio: captured.audio, output });
+    await deps.mux({ video: captured.video, audio: captured.audio, output }, ffmpeg);
     return { output, frames: captured.frames, endReason: captured.endReason };
   } finally {
     if (dir !== undefined) await deps.removeDir(dir);

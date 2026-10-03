@@ -87,10 +87,10 @@ export function runFfmpeg(args: string[], ffmpeg = 'ffmpeg'): Promise<void> {
   });
 }
 
-export async function mux(args: { video: string; audio: string; output: string }): Promise<void> {
+export async function mux(args: { video: string; audio: string; output: string }, ffmpeg = 'ffmpeg'): Promise<void> {
   const part = partPath(args.output);
   try {
-    await runFfmpeg(muxArgs({ video: args.video, audio: args.audio, output: part }));
+    await runFfmpeg(muxArgs({ video: args.video, audio: args.audio, output: part }), ffmpeg);
     await rename(part, args.output);
   } catch (err) {
     await rm(part, { force: true });

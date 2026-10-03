@@ -21,6 +21,10 @@ function harness(over: Partial<ConvertDeps> = {}) {
     preflight: async () => {
       calls.push('preflight');
     },
+    locateFfmpeg: async () => {
+      calls.push('ffmpeg');
+      return '/usr/bin/ffmpeg';
+    },
     ensureEmulator: async (_install, force) => {
       calls.push(`ensure:${force}`);
       return { updated: false };
@@ -32,7 +36,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push('tmp');
       return '/tmp/run';
     },
-    capture: async (_install, quarkId, opts) => {
+    capture: async (_install, quarkId, _ffmpeg, opts) => {
       calls.push(`capture:${quarkId}:${opts.dir}`);
       return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, endReason: 'ended' };
     },
@@ -56,7 +60,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'ensure:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'ffmpeg', 'ensure:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });

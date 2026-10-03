@@ -1,0 +1,30 @@
+name: tools
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tools.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  mirror-ffmpeg:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: tools-ffmpeg-9.0.2
+      ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n9.0.2-22-g46d8f462ee-win64-gpl-9.0.zip
+      ZIP_SHA256: 74827e097445a136b803febd4dcf80f7cba7f14a4c612fb80f7b5e5cedd3ffbe
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror the pinned Windows ffmpeg
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "already mirrored"; exit 0; fi
+          curl -sSfL "$ZIP_URL" -o ffmpeg.zip
+          echo "$ZIP_SHA256  ffmpeg.zip" | sha256sum -c -
+          unzip -q ffmpeg.zip
+          cp ffmpeg-*/bin/ffmpeg.exe ffmpeg.exe
+          cp ffmpeg-*/LICENSE.txt FFMPEG-LICENSE.txt
+          sha256sum ffmpeg.exe > ffmpeg.exe.sha256
+          gh release create "$TAG" ffmpeg.exe ffmpeg.exe.sha256 FFMPEG-LICENSE.txt \
+            --title "ffmpeg 9.0.2 (Windows, mirrored)" \
+            --notes "Unmodified ffmpeg.exe from $ZIP_URL (BtbN/FFmpeg-Builds, GPL). Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 and https://github.com/BtbN/FFmpeg-Builds. Downloaded automatically by fc2mp4 on Windows."
