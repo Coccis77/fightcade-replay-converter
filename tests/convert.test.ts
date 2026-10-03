@@ -82,6 +82,20 @@ describe('convert', () => {
     expect(calls).toContain('runtime:true');
   });
 
+  it('keeps the real error and releases the lock when the temp dir cannot be removed (Windows EBUSY)', async () => {
+    const { deps, calls } = harness({
+      capture: async () => {
+        throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
+      },
+      removeDir: async () => {
+        calls.push('rmdir-failed');
+        throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+      },
+    });
+    await expect(convert(ID, baseOptions, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
+    expect(calls.slice(-2)).toEqual(['rmdir-failed', 'unlock']);
+  });
+
   it('logs the emulator warning and carries on', async () => {
     const logs: string[] = [];
     const { deps } = harness({ ensureEmulator: async () => ({ updated: false, warning: 'using the previous build' }) });

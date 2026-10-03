@@ -79,7 +79,7 @@ export function defaultDeps(): ConvertDeps {
       await mkdir(dir, { recursive: true });
     },
     mux: (args, ffmpeg) => mux(args, ffmpeg),
-    removeDir: (dir) => rm(dir, { recursive: true, force: true }),
+    removeDir: (dir) => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }),
   };
 }
 
@@ -120,7 +120,8 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     await deps.mux({ video: captured.video, audio: captured.audio, output }, ffmpeg);
     return { output, frames: captured.frames, endReason: captured.endReason };
   } finally {
-    if (dir !== undefined) await deps.removeDir(dir);
+    // Cleanup must never replace the real error (Windows keeps files locked briefly after a kill).
+    if (dir !== undefined) await deps.removeDir(dir).catch((err: unknown) => debug(`Could not remove ${dir}: ${String(err)}`));
     await release();
   }
 }

@@ -148,7 +148,11 @@ function wrap(child: ReturnType<typeof spawn>, kill: () => Promise<void>): Captu
       return exited;
     },
     wait: () => (exited ? Promise.resolve(exitCode) : done),
-    kill,
+    // Wait (bounded) for the process to really exit, so its files are released before cleanup.
+    kill: async () => {
+      await kill();
+      await Promise.race([done, new Promise((resolve) => setTimeout(resolve, TIMEOUTS.killMs))]);
+    },
   };
 }
 
