@@ -35,6 +35,8 @@ describe('pipeTransport', () => {
     const transport = await pipeTransport(await socketPath());
     expect(transport.encoderInput).toBe('pipe:0');
     const { sink, data, finished } = slowSink();
+    // Listen before any byte flows: with fast acks the sink can finish before the client closes.
+    const sinkFinished = new Promise<void>((resolve) => sink.on('finish', () => resolve()));
     transport.attach(sink);
 
     const payload = Buffer.alloc(3 * 1024 * 1024);
@@ -43,7 +45,7 @@ describe('pipeTransport', () => {
       const client = connect(transport.emulatorPath, () => client.end(payload));
       client.on('close', () => resolve());
     });
-    await new Promise<void>((resolve) => sink.on('finish', () => resolve()));
+    await sinkFinished;
 
     expect(finished()).toBe(true);
     expect(data().equals(payload)).toBe(true);
