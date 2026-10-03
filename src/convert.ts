@@ -6,6 +6,7 @@ import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
+import { ConvertError, ExitCode } from './errors.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
@@ -16,7 +17,7 @@ import { parseReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
 
 export type ProgressEvent =
-  | { phase: 'preparing-emulator' }
+  | { phase: 'preparing' }
   | { phase: 'connecting' }
   | { phase: 'capturing'; frames: number; elapsedMs: number }
   | { phase: 'finalizing' };
@@ -43,8 +44,8 @@ export interface ConvertDeps {
   resolveOutput(quarkId: string, output?: string): Promise<string>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
-  locateFfmpeg(install: FightcadeInstall): Promise<string>;
-  ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean }): Promise<EnsureResult>;
+  locateFfmpeg(install: FightcadeInstall, signal?: AbortSignal): Promise<string>;
+  ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
@@ -62,7 +63,7 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists }),
-    locateFfmpeg: () => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform)),
+    locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),
     ensureEmulator: async (install, opts) => {
       const dir = emulatorDir();
       const hash = await currentPatchSetHash(emulatorDir);
@@ -70,7 +71,7 @@ export function defaultDeps(): ConvertDeps {
         install.platform === 'darwin' && dir !== null
           ? () => localBuild(install, { emulatorDir: dir, sourceDir: app.sourceDir, runtimeDir: app.runtimeDir })
           : null;
-      return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local));
+      return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local, opts.signal));
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
@@ -96,10 +97,11 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
   let dir: string | undefined;
   try {
     await deps.preflight(install);
-    const ffmpeg = await deps.locateFfmpeg(install);
+    // First run on Windows downloads ffmpeg and the emulator: say so before going quiet.
+    options.onProgress?.({ phase: 'preparing' });
+    const ffmpeg = await deps.locateFfmpeg(install, options.signal);
     debug(`ffmpeg: ${ffmpeg}`);
-    options.onProgress?.({ phase: 'preparing-emulator' });
-    const ensured = await deps.ensureEmulator(install, { force: false, local: false });
+    const ensured = await deps.ensureEmulator(install, { force: false, local: false, signal: options.signal });
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.updated) debug('Emulator updated');
     await deps.prepareRuntime(install, ensured.updated);
@@ -119,6 +121,12 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     await deps.mkdir(dirname(output));
     await deps.mux({ video: captured.video, audio: captured.audio, output }, ffmpeg);
     return { output, frames: captured.frames, endReason: captured.endReason };
+  } catch (err) {
+    // After Ctrl-C, whatever failed next (a download, ffmpeg, the mux) is an interruption.
+    if (options.signal?.aborted && !(err instanceof ConvertError && err.exitCode === ExitCode.Interrupted)) {
+      throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
+    }
+    throw err;
   } finally {
     // Cleanup must never replace the real error (Windows keeps files locked briefly after a kill).
     if (dir !== undefined) await deps.removeDir(dir).catch((err: unknown) => debug(`Could not remove ${dir}: ${String(err)}`));

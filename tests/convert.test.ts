@@ -21,8 +21,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
     preflight: async () => {
       calls.push('preflight');
     },
-    locateFfmpeg: async () => {
-      calls.push('ffmpeg');
+    locateFfmpeg: async (_install, signal) => {
+      calls.push(signal ? 'ffmpeg:signal' : 'ffmpeg');
       return '/usr/bin/ffmpeg';
     },
     ensureEmulator: async (_install, opts) => {
@@ -94,6 +94,25 @@ describe('convert', () => {
     });
     await expect(convert(ID, baseOptions, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
     expect(calls.slice(-2)).toEqual(['rmdir-failed', 'unlock']);
+  });
+
+  it('announces the preparation step before downloading ffmpeg and passes Ctrl-C to it', async () => {
+    const { deps, calls } = harness();
+    const controller = new AbortController();
+    await convert(ID, { ...baseOptions, signal: controller.signal, onProgress: (e) => calls.push(`progress:${e.phase}`) }, deps);
+    expect(calls.indexOf('progress:preparing')).toBeLessThan(calls.indexOf('ffmpeg:signal'));
+    expect(calls.indexOf('progress:preparing')).toBeGreaterThan(-1);
+  });
+
+  it('reports any failure after Ctrl-C as Interrupted', async () => {
+    const controller = new AbortController();
+    const { deps } = harness({
+      mux: async () => {
+        controller.abort();
+        throw new ConvertError(ExitCode.Encode, 'ffmpeg failed (exit 255)');
+      },
+    });
+    await expect(convert(ID, { ...baseOptions, signal: controller.signal }, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
   });
 
   it('logs the emulator warning and carries on', async () => {

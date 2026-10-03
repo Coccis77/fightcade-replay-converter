@@ -47,17 +47,18 @@ export async function locateFfmpeg(platform: Platform, ffmpegDir: string, deps: 
   }
 }
 
-export function defaultFfmpegDeps(platform: Platform): FfmpegDeps {
+export function defaultFfmpegDeps(platform: Platform, signal?: AbortSignal): FfmpegDeps {
+  const within = (ms: number) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   return {
     which: (cmd) => which(cmd, platform),
     exists: pathExists,
     readText: async (url) => {
-      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: AbortSignal.timeout(20_000) });
+      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: within(20_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
       return res.text();
     },
     download: async (url, dest) => {
-      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: AbortSignal.timeout(15 * 60_000) });
+      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: within(15 * 60_000) });
       if (!res.ok || !res.body) throw new Error(`download failed (HTTP ${res.status})`);
       await pipeline(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), createWriteStream(dest));
     },

@@ -124,13 +124,14 @@ interface GitHubRelease {
   assets: { name: string; browser_download_url: string; size: number }[];
 }
 
-export function defaultReleaseDeps(runtimeDir: string, localBuild: ReleaseDeps['localBuild']): ReleaseDeps {
+export function defaultReleaseDeps(runtimeDir: string, localBuild: ReleaseDeps['localBuild'], signal?: AbortSignal): ReleaseDeps {
+  const within = (ms: number) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   const manifestPath = join(runtimeDir, 'manifest.json');
   const exePath = join(runtimeDir, EMULATOR_EXE);
   const headers = { 'User-Agent': 'fc2mp4', Accept: 'application/vnd.github+json' };
   return {
     listReleases: async () => {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, { headers, signal: AbortSignal.timeout(20_000) });
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, { headers, signal: within(20_000) });
       if (!res.ok) throw new Error(`GitHub API ${res.status}`);
       const body = (await res.json()) as GitHubRelease[];
       return body.map((r) => ({
@@ -140,7 +141,7 @@ export function defaultReleaseDeps(runtimeDir: string, localBuild: ReleaseDeps['
       }));
     },
     download: async (url, dest) => {
-      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: AbortSignal.timeout(10 * 60_000) });
+      const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: within(10 * 60_000) });
       if (!res.ok || !res.body) throw new Error(`download failed (HTTP ${res.status})`);
       await pipeline(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), createWriteStream(dest));
     },

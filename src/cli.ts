@@ -7,8 +7,8 @@ declare const __FC2MP4_VERSION__: string | undefined;
 
 function progressLine(e: ProgressEvent): string {
   switch (e.phase) {
-    case 'preparing-emulator':
-      return 'Preparing the emulator…';
+    case 'preparing':
+      return 'Preparing ffmpeg and the emulator (the first run downloads them)…';
     case 'connecting':
       return 'Connecting to the replay stream…';
     case 'capturing': {
