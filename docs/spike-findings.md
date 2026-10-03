@@ -17,3 +17,18 @@
 | FFWD, end-of-replay, segments | not tested (blocked by the AVI failure) | — |
 
 Conclusion: the spec's capture approach (FBNeo native AVI writer under Wine on macOS) does not work. Gate in plan Task 2 Step 12 fails; the design must change.
+
+## Spike 2 (2026-10-03): our own build of Fightcade FBNeo — SUCCESS
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Source available? | Yes: github.com/fightcadeorg/fightcade-fbneo (has quark/GGPO glue); `ggponet.dll` is closed (header + import lib only) | repo |
+| Builds on macOS? | Yes, mingw-w64 i686 cross-compile of the VS2015 file list (1094 files) in ~1 min on 10 cores; needed: perl/host generators, 3 MSVC-isms (`unsigned __int64`, CP1252 source, `ptr > 0`), stub for MSVC-asm `hq_shared32.cpp`, per-file rename of `nSavestateSlot` in luaengine, FBNeo's bundled XAudio2 2.7 header (mingw's 2.8 import fails in Fightcade's Wine) | spike/fbneo-build/build.py |
+| Runs under Fightcade's Wine? | Yes with `nVidSelect 0` (DirectDraw) + `bVidFullStretch 1` in a private config; the DX9 Alt blitter crashes (divide by zero in VidSScaleImage / null D3DX font) | runs |
+| Isolation | Runs from its own folder (our exe + Fightcade DLLs copied + ROMs symlink + own config): the Fightcade install and its inis are never touched | runtime dir |
+| Dump | Hook after each frame in `RunFrame` (run.cpp) writing `pVidImage` rows + `nAudNextSound`; `bDraw` forced to 1 while dumping. Format: BGRA (bpp=4) 384x224 @ 59.59 fps, s16le 44.1 kHz stereo | info.txt |
+| Completeness | Short replay 1791006077129-2245: 8220 frames = 137.94 s video vs 137.93 s audio; last frame = winner pose | ffprobe, frames |
+| Speed | Fast-forward loop (`bAppDoFast` path, nFastSpeed=10) forced while dumping: 137.9 s of replay dumped in 22 s wall (≈6.3x). x264 `-preset slow` encode of it took 71 s — encoding is now the bottleneck | timings |
+| End of replay | Stream does NOT send DISCONNECTED at the end: emulator idles waiting for input, so the dump simply stops growing → stall detection works; `QuarkFinishReplay` hook kept for real disconnects | file mtimes |
+| Disk | raw dump ≈ 20 MB/s of replay (2.8 GB for 138 s) — pipe to ffmpeg or encode while dumping to avoid this | sizes |
+| Quark suffix | `.7` suffix from the client was used; behaviour without it untested | — |
