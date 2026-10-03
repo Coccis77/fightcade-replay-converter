@@ -25,6 +25,6 @@ jobs:
           cp ffmpeg-*/bin/ffmpeg.exe ffmpeg.exe
           cp ffmpeg-*/LICENSE.txt FFMPEG-LICENSE.txt
           sha256sum ffmpeg.exe > ffmpeg.exe.sha256
-          gh release create "$TAG" ffmpeg.exe ffmpeg.exe.sha256 FFMPEG-LICENSE.txt \
+          gh release create "$TAG" ffmpeg.exe ffmpeg.exe.sha256 FFMPEG-LICENSE.txt --latest=false \
             --title "ffmpeg 9.0.2 (Windows, mirrored)" \
             --notes "Unmodified ffmpeg.exe from $ZIP_URL (BtbN/FFmpeg-Builds, GPL). Source: https://github.com/FFmpeg/FFmpeg/tree/n9.0.2 and https://github.com/BtbN/FFmpeg-Builds. Downloaded automatically by fc2mp4 on Windows."

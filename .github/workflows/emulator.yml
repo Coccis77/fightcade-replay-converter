@@ -47,4 +47,5 @@ jobs:
           gh release create "${{ steps.tag.outputs.tag }}" \
             "$RUNNER_TEMP/out/fcadefbneo-fc2mp4.exe" "$RUNNER_TEMP/out/build-info.json" \
             --title "Emulator ${{ steps.tag.outputs.tag }}" \
+            --latest=false \
             --notes "Patched Fightcade FBNeo (github.com/fightcadeorg/fightcade-fbneo) built by CI. Downloaded automatically by fc2mp4."
