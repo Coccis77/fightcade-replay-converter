@@ -26,6 +26,18 @@ describe('patchSetHash', () => {
     await writeFile(join(dir, 'src', 'fc2mp4_dump.cpp'), 'C');
     expect(await patchSetHash(dir)).not.toBe(FIXTURE_HASH);
   });
+  it('is the same for CRLF checkouts (Windows CI) as for LF', async () => {
+    const crlf = await mkdtemp(join(tmpdir(), 'fc2mp4-crlf-'));
+    await mkdir(join(crlf, 'src'));
+    await writeFile(join(crlf, 'patches.py'), 'A\r\nB\r\n');
+    await writeFile(join(crlf, 'src', 'fc2mp4_dump.cpp'), 'C\r\n');
+    const lf = await mkdtemp(join(tmpdir(), 'fc2mp4-lf-'));
+    await mkdir(join(lf, 'src'));
+    await writeFile(join(lf, 'patches.py'), 'A\nB\n');
+    await writeFile(join(lf, 'src', 'fc2mp4_dump.cpp'), 'C\n');
+    expect(await patchSetHash(crlf)).toBe(await patchSetHash(lf));
+  });
+
   it('falls back to hashing the emulator folder when not bundled', async () => {
     const dir = await fixture();
     expect(await currentPatchSetHash(() => dir)).toBe(FIXTURE_HASH);

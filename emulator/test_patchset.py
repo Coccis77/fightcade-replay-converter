@@ -18,5 +18,19 @@ class PatchSetHashTest(unittest.TestCase):
         self.assertEqual(patch_set_hash(d), FIXTURE_HASH)
 
 
+    def test_is_the_same_for_crlf_checkouts(self):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, 'src'))
+        for rel, text in [('patches.py', 'A\r\nB\r\n'), ('src/fc2mp4_dump.cpp', 'C\r\n')]:
+            with open(os.path.join(d, rel), 'w', newline='') as f:
+                f.write(text)
+        lf = tempfile.mkdtemp()
+        os.makedirs(os.path.join(lf, 'src'))
+        for rel, text in [('patches.py', 'A\nB\n'), ('src/fc2mp4_dump.cpp', 'C\n')]:
+            with open(os.path.join(lf, rel), 'w', newline='') as f:
+                f.write(text)
+        self.assertEqual(patch_set_hash(d), patch_set_hash(lf))
+
+
 if __name__ == '__main__':
     unittest.main()

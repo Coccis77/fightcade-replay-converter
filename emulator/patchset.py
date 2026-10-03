@@ -17,7 +17,8 @@ def patch_set_hash(directory):
     for rel in sorted(entries):
         digest.update(rel.encode() + b'\0')
         with open(os.path.join(directory, rel), 'rb') as f:
-            digest.update(f.read() + b'\0')
+            # CRLF checkouts (Windows CI with core.autocrlf) must hash like LF ones.
+            digest.update(f.read().replace(b'\r\n', b'\n') + b'\0')
     return digest.hexdigest()
 
 

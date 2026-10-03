@@ -1,0 +1,3 @@
+# Keep LF everywhere: the emulator patch-set hash and the C++ patch anchors depend on exact bytes.
+* text=auto eol=lf
+*.exe binary

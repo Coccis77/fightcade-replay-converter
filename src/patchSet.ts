@@ -23,7 +23,8 @@ export async function patchSetHash(emulatorDir: string): Promise<string> {
   for (const file of files) {
     hash.update(file);
     hash.update('\0');
-    hash.update(await readFile(join(emulatorDir, file)));
+    // CRLF checkouts (Windows CI with core.autocrlf) must hash like LF ones.
+    hash.update((await readFile(join(emulatorDir, file), 'latin1')).replace(/\r\n/g, '\n'), 'latin1');
     hash.update('\0');
   }
   return hash.digest('hex');
