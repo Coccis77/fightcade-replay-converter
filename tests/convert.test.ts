@@ -23,7 +23,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
     },
     ensureEmulator: async (_install, force) => {
       calls.push(`ensure:${force}`);
-      return { rebuilt: false };
+      return { updated: false };
     },
     prepareRuntime: async (_install, refreshDlls) => {
       calls.push(`runtime:${refreshDlls}`);
@@ -73,14 +73,14 @@ describe('convert', () => {
   });
 
   it('refreshes the runtime DLLs only after a successful rebuild', async () => {
-    const { deps, calls } = harness({ ensureEmulator: async () => ({ rebuilt: true }) });
+    const { deps, calls } = harness({ ensureEmulator: async () => ({ updated: true }) });
     await convert(ID, baseOptions, deps);
     expect(calls).toContain('runtime:true');
   });
 
   it('logs the emulator warning and carries on', async () => {
     const logs: string[] = [];
-    const { deps } = harness({ ensureEmulator: async () => ({ rebuilt: false, warning: 'using the previous build' }) });
+    const { deps } = harness({ ensureEmulator: async () => ({ updated: false, warning: 'using the previous build' }) });
     await convert(ID, { ...baseOptions, log: (m) => logs.push(m) }, deps);
     expect(logs).toContain('Warning: using the previous build');
   });
@@ -116,10 +116,10 @@ describe('rebuildEmulator', () => {
     const { deps, calls } = harness({
       ensureEmulator: async (_install, force) => {
         calls.push(`ensure:${force}`);
-        return { rebuilt: true };
+        return { updated: true };
       },
     });
-    expect(await rebuildEmulator({}, deps)).toEqual({ rebuilt: true });
+    expect(await rebuildEmulator({}, deps)).toEqual({ updated: true });
     expect(calls).toEqual(['lock', 'ensure:true', 'unlock']);
   });
 });

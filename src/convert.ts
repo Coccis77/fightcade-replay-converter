@@ -2,7 +2,9 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
-import { defaultEmulatorPaths, defaultEnsureDeps, ensureEmulator, type EnsureResult } from './emulatorBuild.js';
+import { emulatorDir, localBuild } from './emulatorBuild.js';
+import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
+import { currentPatchSetHash } from './patchSet.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
@@ -53,16 +55,23 @@ export function defaultDeps(): ConvertDeps {
   const home = homedir();
   const platform = supportedPlatform(process.platform);
   const app = appPaths(platform, home, process.env);
-  const paths = { ...defaultEmulatorPaths(home), runtimeDir: app.runtimeDir, sourceDir: app.sourceDir };
   return {
     locateInstall: (override) => locateInstall({ platform: process.platform, home, env: process.env, override, exists: pathExists }),
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists }),
-    ensureEmulator: (install, force) => ensureEmulator(force, defaultEnsureDeps(install, paths)),
-    prepareRuntime: (install, refreshDlls) => prepareRuntime(install, paths.runtimeDir, refreshDlls),
+    ensureEmulator: async (install, force) => {
+      const dir = emulatorDir();
+      const hash = await currentPatchSetHash(emulatorDir);
+      const local =
+        install.platform === 'darwin' && dir !== null
+          ? () => localBuild(install, { emulatorDir: dir, sourceDir: app.sourceDir, runtimeDir: app.runtimeDir })
+          : null;
+      return ensureEmulator({ patchSetHash: hash, force, local: false }, defaultReleaseDeps(app.runtimeDir, local));
+    },
+    prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
-    capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, paths.runtimeDir, quarkId, 'ffmpeg'), opts),
+    capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, 'ffmpeg'), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
     },
@@ -87,8 +96,8 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     options.onProgress?.({ phase: 'preparing-emulator' });
     const ensured = await deps.ensureEmulator(install, false);
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
-    if (ensured.rebuilt) debug('Emulator rebuilt');
-    await deps.prepareRuntime(install, ensured.rebuilt);
+    if (ensured.updated) debug('Emulator updated');
+    await deps.prepareRuntime(install, ensured.updated);
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });

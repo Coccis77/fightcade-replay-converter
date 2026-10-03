@@ -41,7 +41,7 @@ async function main(): Promise<number> {
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
     if (request.command === 'rebuild-emulator') {
       const result = await rebuildEmulator({ fightcadeDir: request.fightcadeDir, log });
-      process.stdout.write(result.rebuilt ? 'Emulator rebuilt.\n' : 'Kept the previous emulator build.\n');
+      process.stdout.write(result.updated ? 'Emulator updated.\n' : 'Emulator already up to date.\n');
       return 0;
     }
     const result = await convert(request.input, {
