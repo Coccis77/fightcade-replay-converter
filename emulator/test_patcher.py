@@ -56,6 +56,12 @@ class ApplyPatchTest(unittest.TestCase):
         with open(self.path, 'rb') as f:
             self.assertIn(b'caf\xe9', f.read())
 
+    def test_matches_crlf_files_and_keeps_their_line_endings(self):
+        self.write('int RunIdle()\r\n{\r\n\treturn 0;\r\n}\r\n')
+        self.assertTrue(apply_patch(self.root, self.idle_patch()))
+        self.assertEqual(self.read(), 'int RunIdle()\r\n{\r\n\tCheck();\r\n\treturn 0;\r\n}\r\n')
+        self.assertFalse(apply_patch(self.root, self.idle_patch()))
+
     def test_apply_patches_reports_only_changed(self):
         apply_patch(self.root, self.idle_patch())
         other = Patch('ret', 'src/run.cpp', '\treturn 0;\n', '\treturn 1;\n')
