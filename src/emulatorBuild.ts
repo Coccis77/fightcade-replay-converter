@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
-import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EMULATOR_EXE } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run, which, type RunFn } from './exec.js';
 import { pathExists, sha256File } from './fsUtil.js';
 import type { FightcadeInstall } from './install.js';
+import { patchSetHash } from './patchSet.js';
 
 export interface Fingerprint {
   fightcadeExeSha256: string;
@@ -26,30 +26,6 @@ export function needsRebuild(manifest: BuildManifest | null, current: Fingerprin
     manifest.ggponetSha256 !== current.ggponetSha256 ||
     manifest.patchSetHash !== current.patchSetHash
   );
-}
-
-async function listFiles(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    if (entry.name === '__pycache__' || entry.name.startsWith('test_')) continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...(await listFiles(full)));
-    else files.push(full);
-  }
-  return files;
-}
-
-export async function patchSetHash(emulatorDir: string): Promise<string> {
-  const hash = createHash('sha256');
-  const files = (await listFiles(emulatorDir)).map((f) => relative(emulatorDir, f)).sort();
-  for (const file of files) {
-    hash.update(file);
-    hash.update('\0');
-    hash.update(await readFile(join(emulatorDir, file)));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
 }
 
 export interface EnsureDeps {

@@ -1,11 +1,7 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ensureEmulator,
   needsRebuild,
-  patchSetHash,
   type BuildManifest,
   type EnsureDeps,
   type Fingerprint,
@@ -104,23 +100,5 @@ describe('ensureEmulator', () => {
       },
     });
     await expect(ensureEmulator(false, deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight });
-  });
-});
-
-describe('patchSetHash', () => {
-  it('changes with patch files but ignores tests and caches', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-patchset-'));
-    await mkdir(join(dir, 'src'));
-    await mkdir(join(dir, '__pycache__'));
-    await writeFile(join(dir, 'patches.py'), 'A');
-    await writeFile(join(dir, 'src', 'fc2mp4_dump.cpp'), 'B');
-    const first = await patchSetHash(dir);
-
-    await writeFile(join(dir, 'test_patcher.py'), 'tests');
-    await writeFile(join(dir, '__pycache__', 'x.pyc'), 'cache');
-    expect(await patchSetHash(dir)).toBe(first);
-
-    await writeFile(join(dir, 'src', 'fc2mp4_dump.cpp'), 'C');
-    expect(await patchSetHash(dir)).not.toBe(first);
   });
 });

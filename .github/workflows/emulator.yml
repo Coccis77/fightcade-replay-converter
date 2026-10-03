@@ -1,0 +1,50 @@
+name: emulator
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  push:
+    branches: [main]
+    paths: ['emulator/**', '.github/workflows/emulator.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide the release tag
+        id: tag
+        run: |
+          commit=$(git ls-remote https://github.com/fightcadeorg/fightcade-fbneo.git refs/heads/master | cut -f1)
+          hash=$(python3 emulator/patchset.py emulator)
+          tag="emulator-${commit:0:12}-${hash:0:12}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Install toolchain
+        if: steps.tag.outputs.exists == 'false'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends g++-mingw-w64-i686 gcc-mingw-w64-i686 binutils-mingw-w64-i686 g++ perl
+      - name: Build
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          i686-w64-mingw32-dlltool -d emulator/ggponet.def -l "$RUNNER_TEMP/libggponet.a"
+          python3 emulator/build.py --source-dir "$RUNNER_TEMP/fightcade-fbneo" --out-dir "$RUNNER_TEMP/out" --ggponet "$RUNNER_TEMP/libggponet.a" \
+            || { cat "$RUNNER_TEMP/out/build.log" 2>/dev/null | tail -80; exit 1; }
+          python3 - "$RUNNER_TEMP/out/build-info.json" "${{ steps.tag.outputs.hash }}" <<'EOF'
+          import json, sys
+          path, patch_hash = sys.argv[1], sys.argv[2]
+          info = json.load(open(path))
+          info['patchSetHash'] = patch_hash
+          info.pop('exe', None)
+          json.dump(info, open(path, 'w'), indent=2)
+          EOF
+      - name: Publish
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            "$RUNNER_TEMP/out/fcadefbneo-fc2mp4.exe" "$RUNNER_TEMP/out/build-info.json" \
+            --title "Emulator ${{ steps.tag.outputs.tag }}" \
+            --notes "Patched Fightcade FBNeo (github.com/fightcadeorg/fightcade-fbneo) built by CI. Downloaded automatically by fc2mp4."
