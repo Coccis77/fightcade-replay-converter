@@ -137,6 +137,12 @@ describe('ensureEmulator', () => {
     expect(written()).toMatchObject({ source: 'local', tag: null, patchSetHash: HASH });
   });
 
+  it('keeps a working installed build when its release is no longer listed', async () => {
+    const { deps, written } = harness({ manifest: installed({ checkedAt: '2026-10-01T00:00:00.000Z' }), exeExists: true, releases: [] });
+    expect((await ensureEmulator(opts, deps)).updated).toBe(false);
+    expect(written()?.checkedAt).toBe(NOW.toISOString());
+  });
+
   it('explains on Windows that no build is published yet', async () => {
     const { deps } = harness({ releases: [] });
     await expect(ensureEmulator(opts, deps)).rejects.toMatchObject({ exitCode: ExitCode.Emulator, message: expect.stringContaining('No emulator build') });

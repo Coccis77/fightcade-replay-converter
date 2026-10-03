@@ -85,7 +85,8 @@ export async function ensureEmulator(opts: { patchSetHash: string; force: boolea
 
   const release = pickRelease(releases, opts.patchSetHash);
   if (!release) {
-    if (usable && manifest.source === 'local') {
+    // Keep a working build even if its release is gone or no longer on the first page.
+    if (usable) {
       await deps.writeManifest({ ...manifest, checkedAt: now.toISOString() });
       return { updated: false };
     }
