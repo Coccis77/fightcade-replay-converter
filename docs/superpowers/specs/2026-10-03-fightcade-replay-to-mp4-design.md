@@ -61,7 +61,11 @@ fc2mp4 <link-or-quarkId> [-o out.mp4] [--scale sharp|smooth] [--no-ffwd]
 
 - Accepts a full replay URL containing `sfiii3nr1/<quarkId>` or a bare quark ID
   (`<digits>-<digits>`).
-- Default output: `./<quarkId>.mp4`.
+- Default output: `<videos>/Fightcade/<quarkId>.mp4`, where `<videos>` is `~/Movies` on macOS and
+  `%USERPROFILE%\Videos` on Windows. The folder is created if missing. `-o` accepts a file path, or
+  an existing directory (the `<quarkId>.mp4` name is kept). The final path is printed at the end.
+  Never write inside the Fightcade install: on macOS it lives inside the signed app bundle and is
+  replaced by updates.
 - `--scale sharp` (default): nearest-neighbour integer upscale, then smooth scale to 1440×1080.
   `--scale smooth`: lanczos straight to 1440×1080.
 
@@ -110,7 +114,8 @@ its class or title (exact criterion fixed in the spike).
 8. `ConfigPatcher.restore()`, release the lock.
 9. `Transcoder`: AVI → MP4 (1440×1080, `libx264 -crf 18 -preset slow -pix_fmt yuv420p`,
    AAC 192k, `-movflags +faststart`, `setsar=1`).
-10. Delete the temp AVI unless `--keep-avi`.
+10. Delete the temp AVI from `fbneo/avi/` (FBNeo's fixed output dir) unless `--keep-avi`, in which
+    case move it next to the MP4.
 
 Steps 7–8 also run from `finally` and from SIGINT/SIGTERM handlers.
 
@@ -142,7 +147,7 @@ frames and trailing frozen frames with ffmpeg `blackdetect` / `freezedetect`.
 
 ## 8. Testing
 
-- **Unit (vitest):** `parseReplayRef`; `ConfigPatcher` patch/restore/stale-backup recovery
+- **Unit (vitest):** `parseReplayRef`; output path resolution (default per OS, `-o` file vs directory); `ConfigPatcher` patch/restore/stale-backup recovery
   (temp dirs); ffmpeg argument builder; `RecordingWatcher` end detection using a fake clock and
   simulated file sizes.
 - **Integration (opt-in, `FC_E2E=1`):** real short quark → MP4; assert with `ffprobe` 1440×1080,
