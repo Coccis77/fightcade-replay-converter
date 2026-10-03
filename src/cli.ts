@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseCli, USAGE } from './cliArgs.js';
+import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
 import { convert, rebuildEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 
@@ -55,6 +55,7 @@ async function main(): Promise<number> {
       onProgress: (e) => process.stderr.write(tty ? `\r\x1b[K${progressLine(e)}` : `${progressLine(e)}\n`),
     });
     if (tty) process.stderr.write('\n');
+    process.stderr.write(`Captured ${formatReplayLength(result.frames)} of replay.\n`);
     process.stdout.write(`${result.output}\n`);
     return 0;
   } catch (err) {

@@ -25,8 +25,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push(`ensure:${force}`);
       return { rebuilt: false };
     },
-    prepareRuntime: async () => {
-      calls.push('runtime');
+    prepareRuntime: async (_install, refreshDlls) => {
+      calls.push(`runtime:${refreshDlls}`);
     },
     makeTempDir: async () => {
       calls.push('tmp');
@@ -56,7 +56,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'ensure:false', 'runtime', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'ensure:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
@@ -70,6 +70,12 @@ describe('convert', () => {
     await expect(convert(ID, baseOptions, deps)).rejects.toMatchObject({ exitCode: ExitCode.Recording });
     expect(calls.slice(-2)).toEqual(['rmdir:/tmp/run', 'unlock']);
     expect(calls.some((c) => c.startsWith('mux'))).toBe(false);
+  });
+
+  it('refreshes the runtime DLLs only after a successful rebuild', async () => {
+    const { deps, calls } = harness({ ensureEmulator: async () => ({ rebuilt: true }) });
+    await convert(ID, baseOptions, deps);
+    expect(calls).toContain('runtime:true');
   });
 
   it('logs the emulator warning and carries on', async () => {

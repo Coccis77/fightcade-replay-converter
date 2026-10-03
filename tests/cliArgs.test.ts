@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCli, parseDuration } from '../src/cliArgs.js';
+import { formatReplayLength, parseCli, parseDuration } from '../src/cliArgs.js';
 import { ExitCode } from '../src/errors.js';
 import { DEFAULT_MAX_DURATION_MS } from '../src/constants.js';
 
@@ -58,5 +58,13 @@ describe('parseCli', () => {
   });
   it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']]])('rejects %j', (argv) => {
     expect(usageError(argv)).toMatchObject({ exitCode: ExitCode.Usage });
+  });
+});
+
+describe('formatReplayLength', () => {
+  it('turns a frame count into m:ss of replay', () => {
+    expect(formatReplayLength(8220)).toBe('2:18');
+    expect(formatReplayLength(32760)).toBe('9:10');
+    expect(formatReplayLength(0)).toBe('0:00');
   });
 });

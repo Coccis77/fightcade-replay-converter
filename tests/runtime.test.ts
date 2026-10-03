@@ -37,13 +37,30 @@ describe('prepareRuntime', () => {
     await writeFile(install.mainIni, 'nVidSelect 4\n');
     const runtime = join(base, 'runtime');
 
-    await prepareRuntime(install, runtime);
-    await prepareRuntime(install, runtime);
+    await prepareRuntime(install, runtime, true);
+    await prepareRuntime(install, runtime, true);
 
     expect((await readdir(runtime)).sort()).toEqual(['LUA51.DLL', 'ROMs', 'config', 'ggponet.dll']);
     expect(await readlink(join(runtime, 'ROMs'))).toBe(install.romsDir);
     expect(await readFile(join(runtime, 'config', 'fcadefbneo-fc2mp4.ini'), 'latin1')).toBe(
       'nVidSelect 0\nbVidFullStretch 1\nbAutoPause 0\n',
     );
+  });
+
+  it('keeps the DLLs of the last good build when not refreshing, but fills in missing ones', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'fc2mp4-rt-'));
+    const install = installLayout(join(base, 'FightCade2.app'));
+    await mkdir(install.romsDir, { recursive: true });
+    await writeFile(join(install.fbneoDir, 'ggponet.dll'), 'old');
+    const runtime = join(base, 'runtime');
+    await prepareRuntime(install, runtime, false);
+    expect(await readFile(join(runtime, 'ggponet.dll'), 'utf8')).toBe('old');
+
+    await writeFile(join(install.fbneoDir, 'ggponet.dll'), 'new');
+    await prepareRuntime(install, runtime, false);
+    expect(await readFile(join(runtime, 'ggponet.dll'), 'utf8')).toBe('old');
+
+    await prepareRuntime(install, runtime, true);
+    expect(await readFile(join(runtime, 'ggponet.dll'), 'utf8')).toBe('new');
   });
 });

@@ -6,7 +6,9 @@ const INFO = 'width=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
 const DIR = '/tmp/fc2mp4-x';
 
 // Simulated time advances only in sleep(); processes exit at a scripted time or when killed.
-function harness(world: { infoAt?: number; info?: string; emulatorExitsAt?: number; encoderExitsAt?: number; encoderCode?: number } = {}) {
+function harness(
+  world: { infoAt?: number; info?: string; emulatorExitsAt?: number; emulatorCode?: number; framesStopAt?: number; encoderExitsAt?: number; encoderCode?: number } = {},
+) {
   let t = 0;
   const log: string[] = [];
   let emulatorEnv: Record<string, string> = {};
@@ -47,13 +49,13 @@ function harness(world: { infoAt?: number; info?: string; emulatorExitsAt?: numb
     startEmulator: (env) => {
       emulatorEnv = env;
       log.push('emulator');
-      return proc('emulator', world.emulatorExitsAt);
+      return proc('emulator', world.emulatorExitsAt, world.emulatorCode ?? 0);
     },
     readInfo: async () => (world.infoAt !== undefined && t >= world.infoAt ? (world.info ?? INFO) : null),
     now: () => t,
     sleep: async (ms) => {
       t += ms;
-      if (world.infoAt !== undefined && t >= world.infoAt) onFrames(Math.round((t - world.infoAt) / 16.78));
+      if (world.infoAt !== undefined && t >= world.infoAt) onFrames(Math.round((Math.min(t, world.framesStopAt ?? Infinity) - world.infoAt) / 16.78));
     },
   };
   return { deps, log, env: () => emulatorEnv, time: () => t };
@@ -71,7 +73,7 @@ describe('capture', () => {
       FC2MP4_VIDEO: 'Z:\\tmp\\fc2mp4-x\\video.fifo',
       FC2MP4_AUDIO: 'Z:\\tmp\\fc2mp4-x\\audio.raw',
       FC2MP4_INFO: 'Z:\\tmp\\fc2mp4-x\\info.txt',
-      FC2MP4_IDLE_MS: '5000',
+      FC2MP4_IDLE_MS: '15000',
     });
     expect(log).toEqual([`fifo:${DIR}/video.fifo`, `encoder:${DIR}/video.mp4`, 'emulator']);
   });
@@ -87,6 +89,19 @@ describe('capture', () => {
   it('reports an emulator that exits before the first frame', async () => {
     const { deps, log } = harness({ emulatorExitsAt: 2_000 });
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Emulator });
+    expect(log).toContain('kill:encoder');
+  });
+
+  it('reports an emulator that crashes after the replay started instead of keeping a truncated video', async () => {
+    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 5_000, emulatorCode: 3 });
+    await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Emulator, message: expect.stringContaining('exit 3') });
+  });
+
+  it('fails instead of hanging when frames stop arriving', async () => {
+    const { deps, log, time } = harness({ infoAt: 1_000, framesStopAt: 10_000 });
+    await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording, message: expect.stringContaining('stalled') });
+    expect(time()).toBeLessThan(60_000);
+    expect(log).toContain('kill:emulator');
     expect(log).toContain('kill:encoder');
   });
 

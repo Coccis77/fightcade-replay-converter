@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { DEFAULT_MAX_DURATION_MS } from './constants.js';
+import { DEFAULT_MAX_DURATION_MS, FRAME_FORMAT } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import type { ScaleMode } from './ffmpeg.js';
 
@@ -22,6 +22,11 @@ export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
   | { command: 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean };
+
+export function formatReplayLength(frames: number): string {
+  const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 const UNIT_MS = { s: 1_000, m: 60_000, h: 3_600_000 } as const;
 

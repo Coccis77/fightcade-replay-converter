@@ -60,6 +60,8 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
 
   const start = deps.now();
   let started = false;
+  let lastFrames = 0;
+  let lastProgressAt = start;
   let endReason: CaptureResult['endReason'] = 'ended';
   try {
     for (;;) {
@@ -69,16 +71,29 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
         if (text !== null) {
           checkInfo(parseInfo(text));
           started = true;
+          lastProgressAt = deps.now();
         }
       }
       if (emulator.exited) {
         if (!started) {
           throw new ConvertError(ExitCode.Emulator, 'The emulator exited before the replay started', 'Check the quark ID; the replay may no longer exist');
         }
+        const code = await emulator.wait();
+        if (code !== 0) {
+          throw new ConvertError(ExitCode.Emulator, `The emulator stopped unexpectedly (exit ${code}) after ${frames} frames`, 'The replay was not captured completely; try again');
+        }
         break;
       }
       if (encoder.exited) throw new ConvertError(ExitCode.Encode, 'The video encoder stopped unexpectedly');
-      const elapsed = deps.now() - start;
+      const now = deps.now();
+      const elapsed = now - start;
+      if (frames !== lastFrames) {
+        lastFrames = frames;
+        lastProgressAt = now;
+      }
+      if (started && now - lastProgressAt >= TIMEOUTS.stallMs) {
+        throw new ConvertError(ExitCode.Recording, `The capture stalled: no new frame for ${TIMEOUTS.stallMs / 1000} s`, 'The emulator may be stuck; try again (use -v for details)');
+      }
       if (!started && elapsed >= TIMEOUTS.firstFrameMs) {
         throw new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the quark ID and that Fightcade replay servers are reachable');
       }

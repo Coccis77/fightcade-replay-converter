@@ -41,7 +41,7 @@ export interface ConvertDeps {
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
   ensureEmulator(install: FightcadeInstall, force: boolean): Promise<EnsureResult>;
-  prepareRuntime(install: FightcadeInstall): Promise<void>;
+  prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
@@ -58,7 +58,7 @@ export function defaultDeps(): ConvertDeps {
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists, which }),
     ensureEmulator: (install, force) => ensureEmulator(force, defaultEnsureDeps(install, paths)),
-    prepareRuntime: (install) => prepareRuntime(install, paths.runtimeDir),
+    prepareRuntime: (install, refreshDlls) => prepareRuntime(install, paths.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
     capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, paths.runtimeDir, quarkId), opts),
     mkdir: async (dir) => {
@@ -86,7 +86,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     const ensured = await deps.ensureEmulator(install, false);
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.rebuilt) debug('Emulator rebuilt');
-    await deps.prepareRuntime(install);
+    await deps.prepareRuntime(install, ensured.rebuilt);
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });

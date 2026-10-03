@@ -11,7 +11,11 @@ export const FRAME_FORMAT = { width: 384, height: 224, bpp: 4, fpsX100: 5959, sa
 
 export const TIMEOUTS = {
   firstFrameMs: 60_000,
-  emulatorIdleMs: 5_000,
+  // The stream never signals its end; the emulator exits after this long without input.
+  // Long enough to ride out network hiccups, which would otherwise look like the end.
+  emulatorIdleMs: 15_000,
+  // Node-side watchdog: no new frame for this long once started means the emulator is stuck.
+  stallMs: 45_000,
   killMs: 15_000,
   pollMs: 500,
 } as const;

@@ -12,11 +12,15 @@ export function runtimeIni(base: string): string {
   return RUNTIME_INI.reduce((text, [key, value]) => setIniValue(text, key, value), base);
 }
 
-export async function prepareRuntime(install: FightcadeInstall, runtimeDir: string): Promise<void> {
+// DLLs are refreshed only together with a new build, so a kept previous build keeps running
+// against the DLLs (notably ggponet.dll) it was linked with.
+export async function prepareRuntime(install: FightcadeInstall, runtimeDir: string, refreshDlls: boolean): Promise<void> {
   await mkdir(join(runtimeDir, 'config'), { recursive: true });
 
   for (const name of await readdir(install.fbneoDir)) {
-    if (/\.dll$/i.test(name)) await copyFile(join(install.fbneoDir, name), join(runtimeDir, name));
+    if (!/\.dll$/i.test(name)) continue;
+    const target = join(runtimeDir, name);
+    if (refreshDlls || !(await pathExists(target))) await copyFile(join(install.fbneoDir, name), target);
   }
 
   const romsLink = join(runtimeDir, 'ROMs');

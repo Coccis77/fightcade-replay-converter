@@ -5,6 +5,7 @@ Self-contained so it can also run in CI later: inputs are a git ref and this fol
 <out>/fcadefbneo-fc2mp4.exe and <out>/build-info.json.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -64,6 +65,21 @@ def fetch(source_dir, ref):
         run(['git', '-C', source_dir, 'checkout', '--force', 'FETCH_HEAD'])
         run(['git', '-C', source_dir, 'clean', '-fdx'])
     return run(['git', '-C', source_dir, 'rev-parse', 'HEAD']).strip()
+
+
+def cache_key(commit, fc2mp4_dir, compiler_version):
+    """Object cache key: everything that affects code generation, compared by content, not mtime."""
+    digest = hashlib.sha256(compiler_version.encode())
+    for root, dirs, files in os.walk(fc2mp4_dir):
+        dirs[:] = sorted(d for d in dirs if d != '__pycache__')
+        for name in sorted(files):
+            if name.startswith('test_'):
+                continue
+            path = os.path.join(root, name)
+            digest.update(os.path.relpath(path, fc2mp4_dir).encode() + b'\0')
+            with open(path, 'rb') as f:
+                digest.update(f.read() + b'\0')
+    return f'{commit[:12]}-{digest.hexdigest()[:12]}'
 
 
 def project_files(source_root):
@@ -169,7 +185,8 @@ def compile_all(source_root, obj, gen, sources, includes, defines, jobs):
 
 def build(source_root, out_dir, commit, ggponet, jobs):
     sources, includes, defines = project_files(source_root)
-    obj = os.path.join(out_dir, 'obj', commit[:12])
+    key = cache_key(commit, HERE, run([CXX, '--version']))
+    obj = os.path.join(out_dir, 'obj', key)
     gen = os.path.join(obj, 'generated')
     stub = os.path.join(HERE, 'stubs', 'hq_shared32.cpp')
     sources = [stub if s.endswith('/scalers/hq_shared32.cpp') else s for s in sources]
@@ -200,7 +217,7 @@ def build(source_root, out_dir, commit, ggponet, jobs):
     os.replace(tmp, exe)
 
     for old in os.listdir(os.path.join(out_dir, 'obj')):
-        if old != commit[:12]:
+        if old != key:
             shutil.rmtree(os.path.join(out_dir, 'obj', old), ignore_errors=True)
     return exe
 
