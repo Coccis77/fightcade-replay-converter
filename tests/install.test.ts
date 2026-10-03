@@ -39,6 +39,12 @@ describe('locateInstall', () => {
     expect(i.root).toBe(WIN_ROOT);
     expect(i.platform).toBe('win32');
   });
+  it('finds Fightcade in a Documents folder redirected to OneDrive', async () => {
+    const env = { USERPROFILE: 'C:\\Users\\a', OneDrive: 'C:\\Users\\a\\OneDrive' };
+    const root = 'C:\\Users\\a\\OneDrive\\Documents\\Fightcade';
+    const i = await locateInstall({ platform: 'win32', home: env.USERPROFILE, env, exists: async (p) => p.startsWith(root) });
+    expect(i.root).toBe(root);
+  });
   it('tries C:\\Fightcade and Programs too', async () => {
     const env = { USERPROFILE: 'C:\\Users\\a', LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' };
     const programs = 'C:\\Users\\a\\AppData\\Local\\Programs\\Fightcade';

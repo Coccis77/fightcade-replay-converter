@@ -36,7 +36,9 @@ export function candidateRoots(platform: Platform, home: string, env: Record<str
   if (platform === 'darwin') return ['/Applications/FightCade2.app', p.join(home, 'Applications', 'FightCade2.app')];
   const profile = env.USERPROFILE ?? home;
   const local = env.LOCALAPPDATA ?? p.join(profile, 'AppData', 'Local');
-  return [p.join(profile, 'Documents', 'Fightcade'), p.join(profile, 'Fightcade'), 'C:\\Fightcade', p.join(local, 'Programs', 'Fightcade')];
+  // OneDrive folder backup (a Windows 11 default) moves Documents under %OneDrive%.
+  const oneDrive = [env.OneDrive, env.OneDriveConsumer].filter((d): d is string => Boolean(d)).map((d) => p.join(d, 'Documents', 'Fightcade'));
+  return [p.join(profile, 'Documents', 'Fightcade'), ...oneDrive, p.join(profile, 'Fightcade'), 'C:\\Fightcade', p.join(local, 'Programs', 'Fightcade')];
 }
 
 export async function locateInstall(opts: {
