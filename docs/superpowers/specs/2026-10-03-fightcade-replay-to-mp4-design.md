@@ -123,7 +123,7 @@ the converter would then download a build matching the manifest instead of compi
 | `emulatorBuild` | manifest check, rebuild, last-good fallback (4.1) |
 | `runtime` | create/refresh the runtime folder (DLL copies, ROMs link, our ini) |
 | `capture` | create the video FIFO in a temp dir, start the video encoder reading it, start the emulator with the env vars, wait for both to exit, enforce `--max-duration`, kill both on error/Ctrl-C |
-| `ffmpegArgs` | (1) live video encode: `-f rawvideo -pix_fmt bgr0 -s WxH -r fps -i video.fifo` → 1440×1080 H.264 (`-preset medium -crf 18 -pix_fmt yuv420p`) video-only temp MP4; (2) final mux: temp video (`-c:v copy`) + `-f s16le -ar rate -ac 2 -i audio.raw` → AAC 192k, `+faststart`, written to `<out>.part.mp4` then renamed |
+| `ffmpegArgs` | (1) live video encode: `-f rawvideo -pix_fmt bgr0 -s WxH -r fps -i video.fifo` → `format=yuv444p` then upscale (≈4× faster than scaling RGB) → 1440×1080 H.264 (`-preset veryfast -crf 20 -pix_fmt yuv420p`, chosen by benchmark: ≈5× real time, no visible loss vs `medium`/crf 18) video-only temp MP4; (2) final mux: temp video (`-c:v copy`) + `-f s16le -ar rate -ac 2 -i audio.raw` → AAC 192k, `+faststart`, written to `<out>.part.mp4` then renamed |
 | `lock` | one conversion at a time (one runtime folder) |
 | `convert()` | orchestration + progress (`building emulator → connecting → capturing (N frames, ×speed) → finalizing`) |
 

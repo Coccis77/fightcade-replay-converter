@@ -5,9 +5,11 @@ import { ConvertError, ExitCode } from './errors.js';
 
 export type ScaleMode = 'sharp' | 'smooth';
 
+// Converting to planar YUV at native size first makes the upscale ~4x faster than scaling
+// packed RGB (the scaler, not x264, was the bottleneck); the output is YUV anyway.
 export const VIDEO_FILTERS: Record<ScaleMode, string> = {
-  sharp: 'scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
-  smooth: 'scale=1440:1080:flags=lanczos,setsar=1',
+  sharp: 'format=yuv444p,scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
+  smooth: 'format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1',
 };
 
 const FPS = String(FRAME_FORMAT.fpsX100 / 100);
@@ -17,7 +19,8 @@ export function videoEncodeArgs({ input, output, scale }: { input: string; outpu
     '-hide_banner', '-nostats', '-progress', 'pipe:1', '-y',
     '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-s', `${FRAME_FORMAT.width}x${FRAME_FORMAT.height}`, '-r', FPS, '-i', input,
     '-vf', VIDEO_FILTERS[scale],
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-an',
+    // veryfast/crf 20: ~5x real time (keeps pace with capture), no visible loss vs medium/crf 18.
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an',
     output,
   ];
 }

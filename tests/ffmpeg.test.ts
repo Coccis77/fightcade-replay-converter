@@ -16,11 +16,11 @@ describe('ffmpeg arguments', () => {
     expect(videoEncodeArgs({ input: '/t/video.fifo', output: '/t/video.mp4', scale: 'sharp' })).toEqual([
       '-hide_banner', '-nostats', '-progress', 'pipe:1', '-y',
       '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-s', '384x224', '-r', '59.59', '-i', '/t/video.fifo',
-      '-vf', 'scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-an',
+      '-vf', 'format=yuv444p,scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an',
       '/t/video.mp4',
     ]);
-    expect(videoEncodeArgs({ input: 'i', output: 'o', scale: 'smooth' })).toContain('scale=1440:1080:flags=lanczos,setsar=1');
+    expect(videoEncodeArgs({ input: 'i', output: 'o', scale: 'smooth' })).toContain('format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1');
   });
 
   it('muxes the video with the raw audio', () => {
