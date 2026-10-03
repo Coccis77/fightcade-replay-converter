@@ -19,7 +19,8 @@ function slowSink() {
     highWaterMark: 1024,
     write(chunk, _enc, done) {
       chunks.push(chunk);
-      setTimeout(done, 1);
+      // Asynchronous ack keeps back-pressure; setImmediate, not setTimeout (≈15 ms ticks on Windows).
+      setImmediate(done);
     },
     final(done) {
       finished = true;
@@ -47,7 +48,7 @@ describe('pipeTransport', () => {
     expect(finished()).toBe(true);
     expect(data().equals(payload)).toBe(true);
     await transport.close();
-  });
+  }, 20_000);
 
   it('works when the encoder is attached after the emulator connected', async () => {
     const transport = await pipeTransport(await socketPath());
