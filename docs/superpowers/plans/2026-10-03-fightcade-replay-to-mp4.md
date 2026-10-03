@@ -1,3 +1,5 @@
+> **SUPERSEDED** by `2026-10-03-fightcade-replay-to-mp4-v2.md` (the native AVI writer does not work under Wine; see docs/spike-findings.md).
+
 # Fightcade Replay → MP4 Converter Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
