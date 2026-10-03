@@ -25,6 +25,11 @@ Builds on: `2026-10-03-fightcade-replay-to-mp4-design.md` (rev 2, macOS). Eviden
 4. A Fightcade source update is picked up automatically within a day (CI rebuild + download); a patch
    that stops applying fails CI loudly (GitHub email) and users keep the last working emulator.
 5. macOS behaviour preserved (same CLI, same output); macOS users no longer need mingw/perl.
+6. The Fightcade install is never modified on any platform: Fightcade's own `fcadefbneo.exe`, DLLs,
+   config and ROMs stay untouched, so Fightcade online play and its replay viewer always use the
+   original emulator. fc2mp4 only reads from the install (DLL copies, a read-only link to `ROMs`) and
+   runs its own `fcadefbneo-fc2mp4.exe` from its own runtime folder. The Windows e2e check verifies
+   the install is unchanged (file hashes before/after).
 
 ## 2. Emulator builds in GitHub Actions + download
 
