@@ -11,7 +11,9 @@ Turn a Fightcade replay (link or quark ID) into a shareable MP4 video.
 
 - **Purpose:** a free, non-commercial community tool, so people can get their replays as videos and
   re-watch specific rounds (Fightcade's replay viewer can't).
-- **Final objective:** a hosted service: drop a replay link, get an MP4.
+- **Final objective:** a hosted service: drop a replay link, get an MP4. It will run automatically on a
+  Linux or Windows server, ideally headless (Linux: same Wine approach under a virtual display such as
+  Xvfb). v1 choices must not block that.
 - **This spec (v1):** a CLI (macOS first, Windows second) whose core is a library function
   `convert()` that the future server can call unchanged.
 - **Scope:** Street Fighter III: 3rd Strike only (`sfiii3nr1`).
@@ -50,8 +52,11 @@ Turn a Fightcade replay (link or quark ID) into a shareable MP4 video.
   (`bAppDoFast` branch) while dumping gave ≈6.3× real time, with every frame.
 - End of a replay: the stream does not disconnect; the emulator waits for input and stops producing
   frames. A real disconnect calls `QuarkFinishReplay()`.
-- A Win32 program under Fightcade's Wine can write to a macOS FIFO (206 MB in 2.4 s), so frames can be
-  streamed into ffmpeg without temp files (raw is ≈20 MB per second of replay).
+- A Win32 program under Fightcade's Wine can write to a macOS FIFO (206 MB in 2.4 s). Raw video is
+  ≈20 MB per second of replay, so it must be streamed, not stored.
+- Writing video AND audio to two FIFOs read by one ffmpeg stalls after ~30 frames (with or without
+  `-thread_queue_size`). Video to a FIFO + audio to a regular file works (600/600 frames, durations
+  equal to 1 ms); audio is only ≈10 MB per minute.
 - `wine.sh taskkill /IM <exe> /F` stops a Wine process cleanly.
 
 ## 3. Usage
@@ -83,15 +88,15 @@ Node ≥ 22.12). Both are driven by the same CLI.
 | `emulator/build.py` | Fetch source (git, latest `master` or `--ref`), apply patches, run generators, cross-compile, link; writes `fcadefbneo-fc2mp4.exe` + `build-info.json` (source commit, patch set version). |
 | `src/emulatorBuild.ts` | TypeScript side: decides when to (re)build, runs `build.py`, keeps the last good build. |
 
-Patch behaviour inside the emulator, active only when the `FC2MP4_VIDEO` / `FC2MP4_AUDIO` environment
-variables give output paths (Windows paths, e.g. `Z:\...\video.fifo`):
+Patch behaviour inside the emulator, active only when the `FC2MP4_VIDEO` (a FIFO) and `FC2MP4_AUDIO`
+(a regular file) environment variables give output paths (Windows paths, e.g. `Z:\...\video.fifo`):
 
 - each frame: write the visible image rows (`nVidImageWidth × nVidImageBPP` bytes per row) and that
   frame's audio (`nBurnSoundLen × 4` bytes); force `bDraw = 1`; take the fast-forward loop;
 - on the first frame write `FC2MP4_INFO` (key=value: width, height, bpp, fps_x100, sample_rate);
 - **end detection inside the emulator:** once frames have started, if no new frame is emulated for
   `FC2MP4_IDLE_MS` (default 5000) of wall-clock time, or `QuarkFinishReplay()` runs, close both outputs
-  (ffmpeg then sees EOF) and exit the process.
+  (the video encoder then sees EOF) and exit the process.
 
 Runtime folder (`~/Library/Caches/fc2mp4/runtime` on macOS, `%LOCALAPPDATA%\fc2mp4\runtime` on
 Windows): our exe, DLLs copied from Fightcade's `emulator/fbneo` folder, a link to its `ROMs` folder,
@@ -117,8 +122,8 @@ the converter would then download a build matching the manifest instead of compi
 | `FightcadeInstall` | locate the install (default paths or `--fightcade-dir`), expose wine.sh, DLL folder, ROMs, exe/dll paths; preflight (ROM, wine.sh, ffmpeg, toolchain when a build is needed) |
 | `emulatorBuild` | manifest check, rebuild, last-good fallback (4.1) |
 | `runtime` | create/refresh the runtime folder (DLL copies, ROMs link, our ini) |
-| `capture` | create two FIFOs in a temp dir, start ffmpeg reading them, start the emulator with the env vars, wait for both to exit, enforce `--max-duration`, kill both on error/Ctrl-C |
-| `ffmpegArgs` | raw inputs (`-f rawvideo -pix_fmt bgr0 -s WxH -r fps` / `-f s16le -ar rate -ac 2`) → 1440×1080 H.264 (`-preset medium -crf 18 -pix_fmt yuv420p`) + AAC 192k, `+faststart`, written to `<out>.part.mp4` then renamed |
+| `capture` | create the video FIFO in a temp dir, start the video encoder reading it, start the emulator with the env vars, wait for both to exit, enforce `--max-duration`, kill both on error/Ctrl-C |
+| `ffmpegArgs` | (1) live video encode: `-f rawvideo -pix_fmt bgr0 -s WxH -r fps -i video.fifo` → 1440×1080 H.264 (`-preset medium -crf 18 -pix_fmt yuv420p`) video-only temp MP4; (2) final mux: temp video (`-c:v copy`) + `-f s16le -ar rate -ac 2 -i audio.raw` → AAC 192k, `+faststart`, written to `<out>.part.mp4` then renamed |
 | `lock` | one conversion at a time (one runtime folder) |
 | `convert()` | orchestration + progress (`building emulator → connecting → capturing (N frames, ×speed) → finalizing`) |
 
@@ -132,13 +137,14 @@ frame, and a mismatch aborts with a clear error rather than producing a garbled 
 2. Locate Fightcade; preflight.
 3. `emulatorBuild.ensure()` → exe path (rebuilds if needed).
 4. `runtime.prepare()`.
-5. `mkfifo video.fifo audio.fifo` in a temp dir; spawn ffmpeg reading both (it blocks until the
-   emulator opens them).
+5. `mkfifo video.fifo` in a temp dir; spawn the video encoder reading it (it blocks until the emulator
+   opens it).
 6. Spawn the emulator (`wine.sh <abs exe> quark:stream,sfiii3nr1,<quarkId>.7,7100`) with
    `FC2MP4_VIDEO`/`FC2MP4_AUDIO`/`FC2MP4_INFO` set.
 7. Watch: emulator exit (normal end), ffmpeg exit, progress from ffmpeg `-progress` (frames), a
    "never started" timeout (60 s without a first frame), `--max-duration`, and Ctrl-C.
-8. On emulator exit: wait for ffmpeg to finish; rename `.part.mp4` → output.
+8. On emulator exit: wait for the video encoder to finish; run the final mux with `audio.raw`; rename
+   `.part.mp4` → output.
 9. Always: kill leftovers (`wine.sh taskkill /IM fcadefbneo-fc2mp4.exe /F`, ffmpeg), remove the temp dir,
    release the lock.
 
@@ -164,7 +170,7 @@ frame, and a mismatch aborts with a clear error rather than producing a garbled 
 
 ## 8. Out of scope (v1)
 
-- The CI-published emulator builds (option B), the hosted service, uploads.
+- The CI-published emulator builds (option B), the hosted service, uploads, headless operation.
 - Replacing `ggponet.dll` (so Fightcade stays a requirement: Wine, `ggponet.dll`, ROM).
 - Games other than `sfiii3nr1`; Flycast; Linux (same Wine approach, later).
 - Round detection / cutting (a valued follow-up: the frame-exact dump makes it possible later).
