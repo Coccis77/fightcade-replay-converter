@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { fifoTransport, pipeName, pipeTransport } from '../src/transport.js';
+import { fifoTransport, pipeName, pipeTransport, relay } from '../src/transport.js';
 
 // On macOS a Unix domain socket stands in for \\.\pipe\…: same node:net API.
 async function socketPath(): Promise<string> {
@@ -88,5 +88,19 @@ describe('fifoTransport', () => {
 describe('pipeName', () => {
   it('builds a Windows named pipe path', () => {
     expect(pipeName(1234, 'ab12')).toBe('\\\\.\\pipe\\fc2mp4-1234-ab12');
+  });
+});
+
+describe('relay', () => {
+  it('ends the encoder input instead of crashing when the emulator connection errors', async () => {
+    const source = new PassThrough();
+    const target = new PassThrough();
+    const chunks: Buffer[] = [];
+    target.on('data', (c) => chunks.push(c));
+    relay(source, target);
+    source.write('partial frame');
+    source.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+    await new Promise((resolve) => target.on('end', resolve));
+    expect(Buffer.concat(chunks).toString()).toBe('partial frame');
   });
 });

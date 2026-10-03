@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
-import type { Writable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 
 // Under Wine, POSIX paths are reachable through drive Z:.
 export function winPath(p: string): string {
@@ -21,6 +21,13 @@ export async function fifoTransport(dir: string, makeFifo: (p: string) => Promis
   return { emulatorPath: winPath(fifo), encoderInput: fifo, attach: () => {}, close: async () => {} };
 }
 
+// Pipe the emulator's bytes into the encoder. A broken connection (emulator killed or crashed)
+// ends the encoder input instead of crashing Node with an unhandled 'error' event.
+export function relay(source: Readable, target: Writable): void {
+  source.on('error', () => target.end());
+  source.pipe(target);
+}
+
 export function pipeName(pid: number, random: string): string {
   return `\\\\.\\pipe\\fc2mp4-${pid}-${random}`;
 }
@@ -35,7 +42,7 @@ export async function pipeTransport(pipePath: string): Promise<VideoTransport> {
       return;
     }
     socket = incoming;
-    if (target) incoming.pipe(target);
+    if (target) relay(incoming, target);
   });
   if (!pipePath.startsWith('\\\\.\\pipe\\')) await rm(pipePath, { force: true });
   await new Promise<void>((resolve, reject) => {
@@ -47,7 +54,7 @@ export async function pipeTransport(pipePath: string): Promise<VideoTransport> {
     encoderInput: 'pipe:0',
     attach(stdin) {
       target = stdin;
-      if (socket) socket.pipe(stdin);
+      if (socket) relay(socket, stdin);
     },
     close: () =>
       new Promise((resolve) => {
