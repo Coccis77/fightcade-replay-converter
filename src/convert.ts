@@ -44,7 +44,7 @@ export interface ConvertDeps {
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
   locateFfmpeg(install: FightcadeInstall): Promise<string>;
-  ensureEmulator(install: FightcadeInstall, force: boolean): Promise<EnsureResult>;
+  ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
@@ -63,14 +63,14 @@ export function defaultDeps(): ConvertDeps {
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists }),
     locateFfmpeg: () => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform)),
-    ensureEmulator: async (install, force) => {
+    ensureEmulator: async (install, opts) => {
       const dir = emulatorDir();
       const hash = await currentPatchSetHash(emulatorDir);
       const local =
         install.platform === 'darwin' && dir !== null
           ? () => localBuild(install, { emulatorDir: dir, sourceDir: app.sourceDir, runtimeDir: app.runtimeDir })
           : null;
-      return ensureEmulator({ patchSetHash: hash, force, local: false }, defaultReleaseDeps(app.runtimeDir, local));
+      return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local));
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
@@ -99,7 +99,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     const ffmpeg = await deps.locateFfmpeg(install);
     debug(`ffmpeg: ${ffmpeg}`);
     options.onProgress?.({ phase: 'preparing-emulator' });
-    const ensured = await deps.ensureEmulator(install, false);
+    const ensured = await deps.ensureEmulator(install, { force: false, local: false });
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.updated) debug('Emulator updated');
     await deps.prepareRuntime(install, ensured.updated);
@@ -125,17 +125,26 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
   }
 }
 
-export async function rebuildEmulator(
+async function runEmulatorCommand(
+  opts: { force: boolean; local: boolean },
   options: { fightcadeDir?: string; log?: (msg: string) => void },
-  deps: ConvertDeps = defaultDeps(),
+  deps: ConvertDeps,
 ): Promise<EnsureResult> {
   const install = await deps.locateInstall(options.fightcadeDir);
   const release = await deps.acquireLock();
   try {
-    const result = await deps.ensureEmulator(install, true);
+    const result = await deps.ensureEmulator(install, opts);
     if (result.warning) options.log?.(`Warning: ${result.warning}`);
     return result;
   } finally {
     await release();
   }
+}
+
+export function updateEmulator(options: { fightcadeDir?: string; log?: (msg: string) => void }, deps: ConvertDeps = defaultDeps()): Promise<EnsureResult> {
+  return runEmulatorCommand({ force: true, local: false }, options, deps);
+}
+
+export function buildEmulatorLocally(options: { fightcadeDir?: string; log?: (msg: string) => void }, deps: ConvertDeps = defaultDeps()): Promise<EnsureResult> {
+  return runEmulatorCommand({ force: false, local: true }, options, deps);
 }

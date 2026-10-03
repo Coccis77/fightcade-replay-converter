@@ -4,24 +4,26 @@ import { ConvertError, ExitCode } from './errors.js';
 import type { ScaleMode } from './ffmpeg.js';
 
 export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
+       fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
 
-Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS).
+Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS and Windows).
 
-  -o, --output <path>       MP4 file, or an existing folder (default: ~/Movies/Fightcade)
+  -o, --output <path>       MP4 file, or an existing folder
+                            (default: ~/Movies/Fightcade or %USERPROFILE%\\Videos\\Fightcade)
       --scale sharp|smooth  Upscaling style (default: sharp)
       --max-duration <d>    Stop capturing after this long: 90s, 45m, 1h (default: 60m)
-      --fightcade-dir <p>   Fightcade install (FightCade2.app)
+      --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows)
   -v, --verbose             Print debug details
   -h, --help                Show this help
 
-rebuild-emulator fetches the latest Fightcade FBNeo source, patches and rebuilds it
-(this also happens automatically when Fightcade updates).`;
+update-emulator checks GitHub for a newer emulator build now (otherwise once a day).
+rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).`;
 
 export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
-  | { command: 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean };
+  | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean };
 
 export function formatReplayLength(frames: number): string {
   const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
@@ -64,9 +66,10 @@ export function parseCli(argv: string[]): CliRequest {
   if (values.help) return { command: 'help' };
   const verbose = values.verbose ?? false;
 
-  if (positionals[0] === 'rebuild-emulator') {
-    if (positionals.length !== 1) throw usage('rebuild-emulator takes no arguments');
-    return { command: 'rebuild-emulator', fightcadeDir: values['fightcade-dir'], verbose };
+  const command = positionals[0];
+  if (command === 'update-emulator' || command === 'rebuild-emulator') {
+    if (positionals.length !== 1) throw usage(`${command} takes no arguments`);
+    return { command, fightcadeDir: values['fightcade-dir'], verbose };
   }
   if (positionals.length !== 1) throw usage('Expected exactly one replay link or quark ID');
   const scale = values.scale ?? 'sharp';

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
-import { convert, rebuildEmulator, type ProgressEvent } from './convert.js';
+import { buildEmulatorLocally, convert, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 
 function progressLine(e: ProgressEvent): string {
   switch (e.phase) {
     case 'preparing-emulator':
-      return 'Preparing the emulator (a rebuild takes about a minute)…';
+      return 'Preparing the emulator…';
     case 'connecting':
       return 'Connecting to the replay stream…';
     case 'capturing': {
@@ -39,10 +39,11 @@ async function main(): Promise<number> {
       return 0;
     }
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
-    if (request.command === 'rebuild-emulator') {
-      const result = await rebuildEmulator({ fightcadeDir: request.fightcadeDir, log });
+    if (request.command !== 'convert') {
+      const run = request.command === 'update-emulator' ? updateEmulator : buildEmulatorLocally;
+      const result = await run({ fightcadeDir: request.fightcadeDir, log });
       process.stdout.write(result.updated ? 'Emulator updated.\n' : 'Emulator already up to date.\n');
-      return 0;
+      return result.warning ? ExitCode.Emulator : 0;
     }
     const result = await convert(request.input, {
       output: request.output,
@@ -70,4 +71,6 @@ async function main(): Promise<number> {
   }
 }
 
-process.exitCode = await main();
+main().then((code) => {
+  process.exitCode = code;
+});

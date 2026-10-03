@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convert, rebuildEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
+import { buildEmulatorLocally, convert, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
 import { installLayout } from '../src/install.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
 
@@ -25,8 +25,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push('ffmpeg');
       return '/usr/bin/ffmpeg';
     },
-    ensureEmulator: async (_install, force) => {
-      calls.push(`ensure:${force}`);
+    ensureEmulator: async (_install, opts) => {
+      calls.push(`ensure:${opts.force}:${opts.local}`);
       return { updated: false };
     },
     prepareRuntime: async (_install, refreshDlls) => {
@@ -60,7 +60,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'ffmpeg', 'ensure:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
@@ -115,15 +115,25 @@ describe('convert', () => {
   });
 });
 
-describe('rebuildEmulator', () => {
-  it('forces a rebuild under the lock', async () => {
+describe('emulator commands', () => {
+  it('update-emulator forces a release check under the lock', async () => {
     const { deps, calls } = harness({
-      ensureEmulator: async (_install, force) => {
-        calls.push(`ensure:${force}`);
+      ensureEmulator: async (_install, opts) => {
+        calls.push(`ensure:${opts.force}:${opts.local}`);
         return { updated: true };
       },
     });
-    expect(await rebuildEmulator({}, deps)).toEqual({ updated: true });
-    expect(calls).toEqual(['lock', 'ensure:true', 'unlock']);
+    expect(await updateEmulator({}, deps)).toEqual({ updated: true });
+    expect(calls).toEqual(['lock', 'ensure:true:false', 'unlock']);
+  });
+  it('rebuild-emulator builds locally', async () => {
+    const { deps, calls } = harness({
+      ensureEmulator: async (_install, opts) => {
+        calls.push(`ensure:${opts.force}:${opts.local}`);
+        return { updated: true };
+      },
+    });
+    await buildEmulatorLocally({}, deps);
+    expect(calls).toEqual(['lock', 'ensure:false:true', 'unlock']);
   });
 });
