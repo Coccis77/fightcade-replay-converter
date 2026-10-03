@@ -41,5 +41,25 @@ class CacheKeyTest(unittest.TestCase):
         self.assertEqual(self.key(), before)
 
 
+
+class CaseShimTest(unittest.TestCase):
+    def test_writes_initguid_shim(self):
+        from build import write_case_shims
+        d = write_case_shims(os.path.join(tempfile.mkdtemp(), 'shims'))
+        with open(os.path.join(d, 'InitGuid.h')) as f:
+            self.assertEqual(f.read(), '#include <initguid.h>\n')
+
+
+class MissingToolsTest(unittest.TestCase):
+    def test_reports_missing_tools_and_git_only_when_fetching(self):
+        from build import missing_tools
+        present = {'perl', 'c++', 'cc', 'i686-w64-mingw32-gcc', 'i686-w64-mingw32-g++', 'i686-w64-mingw32-windres'}
+        which = lambda tool: '/usr/bin/' + tool if tool in present else None
+        self.assertEqual(missing_tools(True, which), ['git'])
+        self.assertEqual(missing_tools(False, which), [])
+        present.discard('perl')
+        self.assertEqual(missing_tools(False, which), ['perl'])
+
+
 if __name__ == '__main__':
     unittest.main()

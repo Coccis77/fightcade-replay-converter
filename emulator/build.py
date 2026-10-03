@@ -44,6 +44,24 @@ LIBS = ['-ld3dx9_43', '-ld3d9', '-ldinput8', '-ldsound', '-ldxguid', '-lksuser',
         '-lws2_32', '-lsetupapi', '-lcomdlg32', '-lcomctl32', '-lshell32', '-lshlwapi', '-lwinmm',
         '-lole32', '-loleaut32', '-luuid', '-ladvapi32', '-lgdi32', '-luser32']
 
+REQUIRED_TOOLS = ['perl', 'c++', 'cc', CC, CXX, WINDRES]
+# Sources include headers with a different case than mingw ships (Linux is case-sensitive).
+# Added with -idirafter so the real header wins wherever it resolves (case-insensitive macOS).
+CASE_SHIMS = {'InitGuid.h': '#include <initguid.h>\n'}
+
+
+def write_case_shims(directory):
+    os.makedirs(directory, exist_ok=True)
+    for name, content in CASE_SHIMS.items():
+        with open(os.path.join(directory, name), 'w') as f:
+            f.write(content)
+    return directory
+
+
+def missing_tools(need_git, which=shutil.which):
+    tools = (['git'] if need_git else []) + REQUIRED_TOOLS
+    return [tool for tool in tools if which(tool) is None]
+
 
 class BuildError(Exception):
     pass
@@ -159,10 +177,10 @@ def object_path(obj, source_root, src):
     return os.path.join(obj, os.path.splitext(rel)[0] + '.o')
 
 
-def compile_all(source_root, obj, gen, sources, includes, defines, jobs):
+def compile_all(source_root, obj, gen, sources, includes, defines, jobs, shims):
     drv_includes = ['-I' + os.path.join(source_root, 'src/burn/drv', d) for d in GENERATED_INCLUDE_DIRS]
     common_includes = ['-I' + gen] + drv_includes + ['-I' + i for i in includes] + \
-        ['-I' + os.path.join(source_root, 'src/dep/mingw/include')]
+        ['-I' + os.path.join(source_root, 'src/dep/mingw/include'), '-idirafter', shims]
     common_defines = ['-D' + d.replace('__inline static', 'static inline') for d in defines if not d.startswith('FASTCALL')]
 
     def compile_one(src):
@@ -194,7 +212,8 @@ def build(source_root, out_dir, commit, ggponet, jobs):
     sources.append(os.path.join(HERE, 'src', 'fc2mp4_dump.cpp'))
     generate(source_root, gen, os.path.join(obj, 'host'), sources)
 
-    failures = compile_all(source_root, obj, gen, sources, includes, defines, jobs)
+    shims = write_case_shims(os.path.join(obj, 'shims'))
+    failures = compile_all(source_root, obj, gen, sources, includes, defines, jobs, shims)
     if failures:
         details = '\n'.join(f'=== {os.path.relpath(src, source_root)}\n{err}' for src, err in failures)
         raise BuildError(f'{len(failures)} file(s) failed to compile\n{details}')
@@ -226,11 +245,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-dir', required=True)
     parser.add_argument('--out-dir', required=True)
-    parser.add_argument('--ggponet', required=True, help="Fightcade's ggponet.dll (linked against)")
+    parser.add_argument('--ggponet', required=True, help="Fightcade's ggponet.dll, or an import library made from emulator/ggponet.def")
     parser.add_argument('--ref', default='master')
     parser.add_argument('--jobs', type=int, default=os.cpu_count() or 4)
     parser.add_argument('--skip-fetch', action='store_true', help='build --source-dir as it is')
     args = parser.parse_args(argv)
+
+    missing = missing_tools(need_git=not args.skip_fetch)
+    if missing:
+        print(f'MISSING TOOLS: {", ".join(missing)}', file=sys.stderr)
+        return EXIT_BUILD
 
     source_dir = os.path.abspath(args.source_dir)
     out_dir = os.path.abspath(args.out_dir)

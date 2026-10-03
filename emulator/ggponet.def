@@ -1,0 +1,17 @@
+LIBRARY ggponet.dll
+EXPORTS
+ggpo_advance_frame
+ggpo_client_chat
+ggpo_client_connect
+ggpo_client_set_game_event
+ggpo_close_session
+ggpo_get_stats
+ggpo_idle
+ggpo_log
+ggpo_logv
+ggpo_set_frame_delay
+ggpo_start_replay
+ggpo_start_session
+ggpo_start_streaming
+ggpo_start_synctest
+ggpo_synchronize_input
