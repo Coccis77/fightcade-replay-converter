@@ -61,5 +61,20 @@ class MissingToolsTest(unittest.TestCase):
         self.assertEqual(missing_tools(False, which), ['perl'])
 
 
+
+class RuntimeCheckTest(unittest.TestCase):
+    def write(self, data):
+        path = os.path.join(tempfile.mkdtemp(), 'x.exe')
+        with open(path, 'wb') as f:
+            f.write(data)
+        return path
+
+    def test_detects_the_legacy_msvcrt_import(self):
+        from build import links_legacy_msvcrt
+        self.assertTrue(links_legacy_msvcrt(self.write(b'MZ....KERNEL32.dll\0MSVCRT.dll\0')))
+        self.assertTrue(links_legacy_msvcrt(self.write(b'MZ....msvcrt.dll\0')))
+        self.assertFalse(links_legacy_msvcrt(self.write(b'MZ....api-ms-win-crt-stdio-l1-1-0.dll\0')))
+
+
 if __name__ == '__main__':
     unittest.main()

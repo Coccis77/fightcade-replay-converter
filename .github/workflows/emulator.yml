@@ -10,7 +10,9 @@ permissions:
   contents: write
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Homebrew's mingw-w64 links the UCRT (Debian/Ubuntu's links msvcrt.dll, which breaks ROM
+    # loading); it is also the toolchain the emulator was validated with.
+    runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -26,7 +28,7 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
       - name: Install toolchain
         if: steps.tag.outputs.exists == 'false'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends g++-mingw-w64-i686 gcc-mingw-w64-i686 binutils-mingw-w64-i686 g++ perl
+        run: brew install mingw-w64
       - name: Build
         if: steps.tag.outputs.exists == 'false'
         run: |

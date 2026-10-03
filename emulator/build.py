@@ -63,6 +63,16 @@ def missing_tools(need_git, which=shutil.which):
     return [tool for tool in tools if which(tool) is None]
 
 
+def links_legacy_msvcrt(exe):
+    """True if the exe imports the legacy msvcrt.dll instead of the UCRT.
+
+    With msvcrt, FBNeo's `_stprintf("%s%hs")` builds broken ROM paths ("ROMs not found"). Homebrew's
+    mingw-w64 links UCRT by default; Debian/Ubuntu's mingw-w64 (msvcrt default) must not be used.
+    """
+    with open(exe, 'rb') as f:
+        return b'msvcrt.dll\0' in f.read().lower()
+
+
 class BuildError(Exception):
     pass
 
@@ -233,6 +243,9 @@ def build(source_root, out_dir, commit, ggponet, jobs):
     exe = os.path.join(out_dir, EXE_NAME)
     tmp = exe + '.tmp'
     run([CXX, '-m32', '-mwindows', '-static', '-O2', '-s', '-o', tmp, '@' + rsp, ggponet] + LIBS)
+    if links_legacy_msvcrt(tmp):
+        os.remove(tmp)
+        raise BuildError('this mingw-w64 links the legacy msvcrt.dll, which breaks ROM loading; use a UCRT toolchain (e.g. Homebrew mingw-w64)')
     os.replace(tmp, exe)
 
     for old in os.listdir(os.path.join(out_dir, 'obj')):
