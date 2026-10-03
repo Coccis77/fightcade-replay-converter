@@ -8,6 +8,7 @@ import { fifoTransport, pipeName, pipeTransport } from '../src/transport.js';
 
 // On macOS a Unix domain socket stands in for \\.\pipe\…: same node:net API.
 async function socketPath(): Promise<string> {
+  if (process.platform === 'win32') return pipeName(process.pid, String(Math.random()).slice(2, 8));
   return join(await mkdtemp(join(tmpdir(), 'fc2mp4-pipe-')), 'video.sock');
 }
 

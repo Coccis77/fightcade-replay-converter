@@ -1,0 +1,59 @@
+name: cli
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: build/fc2mp4.exe
+            name: fc2mp4.exe
+          - os: macos-latest
+            artifact: build/fc2mp4
+            name: fc2mp4-macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Unit tests (macOS paths)
+        if: runner.os == 'macOS'
+        run: npm test
+      - name: Real Windows named-pipe test
+        if: runner.os == 'Windows'
+        run: npx vitest run tests/transport.test.ts -t pipeTransport
+      - run: npm run bundle
+      - run: npm run sea
+      - name: Smoke test
+        shell: bash
+        run: ./${{ matrix.artifact }} --help | head -1
+      - shell: bash
+        run: cp ${{ matrix.artifact }} ${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - run: |
+          gh release create "${GITHUB_REF_NAME}" fc2mp4.exe fc2mp4-macos-arm64 \
+            --repo "${GITHUB_REPOSITORY}" --title "fc2mp4 ${GITHUB_REF_NAME}" \
+            --notes "Download fc2mp4.exe (Windows) or fc2mp4-macos-arm64 (macOS), then run it with a Fightcade replay link. Unsigned: Windows SmartScreen may ask you to confirm (More info → Run anyway)."

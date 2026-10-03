@@ -3,18 +3,29 @@
   "version": "0.2.0",
   "description": "Convert Fightcade Street Fighter III: 3rd Strike replays to MP4",
   "type": "module",
-  "bin": { "fc2mp4": "dist/cli.js" },
-  "files": ["dist", "emulator"],
-  "engines": { "node": ">=22.12" },
+  "bin": {
+    "fc2mp4": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "emulator"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:emulator": "python3 -m unittest discover -s emulator -p 'test_*.py'",
-    "dev": "tsx src/cli.ts"
+    "dev": "tsx src/cli.ts",
+    "bundle": "node scripts/bundle.mjs",
+    "sea": "node scripts/sea.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.23.0",
     "typescript": "^5.9.3",
     "vitest": "^5.0.3"

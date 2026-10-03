@@ -3,6 +3,8 @@ import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 
+declare const __FC2MP4_VERSION__: string | undefined;
+
 function progressLine(e: ProgressEvent): string {
   switch (e.phase) {
     case 'preparing-emulator':
@@ -32,6 +34,10 @@ async function main(): Promise<number> {
 
   const tty = process.stderr.isTTY;
   const log = (msg: string) => process.stderr.write(`${tty ? '\n' : ''}${msg}\n`);
+  if (process.argv.includes('--version')) {
+    process.stdout.write(`${typeof __FC2MP4_VERSION__ === 'string' ? __FC2MP4_VERSION__ : 'dev'}\n`);
+    return 0;
+  }
   try {
     const request = parseCli(process.argv.slice(2));
     if (request.command === 'help') {
