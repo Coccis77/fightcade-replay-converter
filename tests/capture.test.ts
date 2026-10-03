@@ -1,5 +1,7 @@
+import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { capture, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { capture, emulatorCommand, killCommand, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
 const INFO = 'width=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
@@ -38,10 +40,22 @@ function harness(
   }
 
   const deps: CaptureDeps = {
-    makeFifo: async (p) => {
-      log.push(`fifo:${p}`);
+    openTransport: async (dir) => {
+      log.push(`transport:${dir}`);
+      return {
+        emulatorPath: 'Z:\\tmp\\fc2mp4-x\\video.fifo',
+        encoderInput: `${dir}/video.fifo`,
+        attach: () => {
+          log.push('attach');
+        },
+        close: async () => {
+          log.push('close:transport');
+        },
+      };
     },
-    startEncoder: (args, frames) => {
+    toEmulatorPath: (p) => winPath(p),
+    startEncoder: (args, frames, attach) => {
+      if (attach) attach(new PassThrough());
       log.push(`encoder:${args.at(-1)}`);
       onFrames = frames;
       return proc('encoder', world.encoderExitsAt, world.encoderCode ?? 0);
@@ -75,7 +89,7 @@ describe('capture', () => {
       FC2MP4_INFO: 'Z:\\tmp\\fc2mp4-x\\info.txt',
       FC2MP4_IDLE_MS: '15000',
     });
-    expect(log).toEqual([`fifo:${DIR}/video.fifo`, `encoder:${DIR}/video.mp4`, 'emulator']);
+    expect(log).toEqual([`transport:${DIR}`, `encoder:${DIR}/video.mp4`, 'emulator', 'close:transport']);
   });
 
   it('fails within firstFrameMs when the stream never starts, killing both processes', async () => {
@@ -103,6 +117,22 @@ describe('capture', () => {
     expect(time()).toBeLessThan(60_000);
     expect(log).toContain('kill:emulator');
     expect(log).toContain('kill:encoder');
+  });
+
+  it('closes the transport on every exit path', async () => {
+    for (const world of [{}, { emulatorExitsAt: 2_000 }, { infoAt: 1_000, encoderExitsAt: 3_000, encoderCode: 1 }]) {
+      const { deps, log } = harness(world);
+      await capture(deps, base).catch(() => {});
+      expect(log).toContain('close:transport');
+    }
+  });
+
+  it('attaches the encoder stdin when the transport is a pipe', async () => {
+    const { deps, log } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000 });
+    const open = deps.openTransport;
+    deps.openTransport = async (dir) => ({ ...(await open(dir)), encoderInput: 'pipe:0', emulatorPath: '\\\\.\\pipe\\fc2mp4-1-a' });
+    await capture(deps, base);
+    expect(log).toContain('attach');
   });
 
   it('reports an encoder that dies while capturing', async () => {
@@ -141,5 +171,25 @@ describe('capture', () => {
 describe('winPath', () => {
   it('maps a POSIX path onto Wine drive Z:', () => {
     expect(winPath('/Users/a b/x.fifo')).toBe('Z:\\Users\\a b\\x.fifo');
+  });
+});
+
+describe('emulator launch per platform', () => {
+  it('runs through wine.sh on macOS', () => {
+    const mac = installLayout('/Applications/FightCade2.app', 'darwin');
+    expect(emulatorCommand(mac, '/rt', '1-2')).toEqual({
+      command: '/Applications/FightCade2.app/Contents/Resources/wine.sh',
+      args: ['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,sfiii3nr1,1-2.7,7100'],
+    });
+    expect(killCommand(mac)).toEqual({ command: mac.launcher, args: ['taskkill', '/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
+  });
+  it('runs the exe directly on Windows, with spaces in the path', () => {
+    const win = installLayout('C:\\Users\\Jean Pierre\\Documents\\Fightcade', 'win32');
+    const rt = 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\runtime';
+    expect(emulatorCommand(win, rt, '1-2')).toEqual({
+      command: `${rt}\\fcadefbneo-fc2mp4.exe`,
+      args: ['quark:stream,sfiii3nr1,1-2.7,7100'],
+    });
+    expect(killCommand(win)).toEqual({ command: 'taskkill', args: ['/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
   });
 });

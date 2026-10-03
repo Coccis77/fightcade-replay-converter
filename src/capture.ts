@@ -1,12 +1,18 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { Writable } from 'node:stream';
 import { EMULATOR_EXE, TIMEOUTS } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run } from './exec.js';
 import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
+import { pathFor } from './platform.js';
 import { streamArg } from './replayRef.js';
+import { fifoTransport, pipeName, pipeTransport, winPath, type VideoTransport } from './transport.js';
+
+export { winPath } from './transport.js';
 
 export interface CaptureProcess {
   readonly exited: boolean;
@@ -15,8 +21,9 @@ export interface CaptureProcess {
 }
 
 export interface CaptureDeps {
-  makeFifo(path: string): Promise<void>;
-  startEncoder(args: string[], onFrames: (frames: number) => void): CaptureProcess;
+  openTransport(dir: string): Promise<VideoTransport>;
+  toEmulatorPath(p: string): string;
+  startEncoder(args: string[], onFrames: (frames: number) => void, attach: ((stdin: Writable) => void) | null): CaptureProcess;
   startEmulator(env: Record<string, string>): CaptureProcess;
   readInfo(path: string): Promise<string | null>;
   now(): number;
@@ -38,23 +45,30 @@ export interface CaptureResult {
   endReason: 'ended' | 'max-duration';
 }
 
-export function winPath(p: string): string {
-  return `Z:${p.replace(/\//g, '\\')}`;
+export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, quarkId: string): { command: string; args: string[] } {
+  const exe = pathFor(install.platform).join(runtimeDir, EMULATOR_EXE);
+  if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(quarkId)] };
+  return { command: exe, args: [streamArg(quarkId)] };
+}
+
+export function killCommand(install: FightcadeInstall): { command: string; args: string[] } {
+  const args = ['/IM', EMULATOR_EXE, '/F'];
+  return install.launcher !== null ? { command: install.launcher, args: ['taskkill', ...args] } : { command: 'taskkill', args };
 }
 
 export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<CaptureResult> {
-  const fifo = join(opts.dir, 'video.fifo');
   const video = join(opts.dir, 'video.mp4');
   const audio = join(opts.dir, 'audio.raw');
   const info = join(opts.dir, 'info.txt');
 
-  await deps.makeFifo(fifo);
+  const transport = await deps.openTransport(opts.dir);
   let frames = 0;
-  const encoder = deps.startEncoder(videoEncodeArgs({ input: fifo, output: video, scale: opts.scale }), (n) => (frames = n));
+  const attach = transport.encoderInput === 'pipe:0' ? (stdin: Writable) => transport.attach(stdin) : null;
+  const encoder = deps.startEncoder(videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale }), (n) => (frames = n), attach);
   const emulator = deps.startEmulator({
-    FC2MP4_VIDEO: winPath(fifo),
-    FC2MP4_AUDIO: winPath(audio),
-    FC2MP4_INFO: winPath(info),
+    FC2MP4_VIDEO: transport.emulatorPath,
+    FC2MP4_AUDIO: deps.toEmulatorPath(audio),
+    FC2MP4_INFO: deps.toEmulatorPath(info),
     FC2MP4_IDLE_MS: String(TIMEOUTS.emulatorIdleMs),
   });
 
@@ -111,6 +125,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
   } finally {
     if (!emulator.exited) await emulator.kill().catch(() => {});
     if (!encoder.exited) await encoder.kill().catch(() => {});
+    await transport.close().catch(() => {});
   }
 }
 
@@ -137,14 +152,22 @@ function wrap(child: ReturnType<typeof spawn>, kill: () => Promise<void>): Captu
   };
 }
 
-export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string, quarkId: string): CaptureDeps {
+export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string, quarkId: string, ffmpeg: string): CaptureDeps {
   return {
-    makeFifo: async (path) => {
-      const result = await run('mkfifo', [path]);
-      if (result.code !== 0) throw new ConvertError(ExitCode.Recording, `mkfifo failed: ${result.stderr.trim()}`);
-    },
-    startEncoder: (args, onFrames) => {
-      const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    openTransport: (dir) =>
+      install.platform === 'win32'
+        ? pipeTransport(pipeName(process.pid, randomBytes(4).toString('hex')))
+        : fifoTransport(dir, async (path) => {
+            const result = await run('mkfifo', [path]);
+            if (result.code !== 0) throw new ConvertError(ExitCode.Recording, `mkfifo failed: ${result.stderr.trim()}`);
+          }),
+    toEmulatorPath: (p) => (install.platform === 'win32' ? p : winPath(p)),
+    startEncoder: (args, onFrames, attach) => {
+      const child = spawn(ffmpeg, args, { stdio: [attach ? 'pipe' : 'ignore', 'pipe', 'ignore'] });
+      if (attach && child.stdin) {
+        child.stdin.on('error', () => {}); // ffmpeg exiting early must not crash Node (EPIPE)
+        attach(child.stdin);
+      }
       child.stdout!.on('data', (d) => {
         const frames = parseProgressFrames(String(d));
         if (frames !== null) onFrames(frames);
@@ -154,13 +177,16 @@ export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string
       });
     },
     startEmulator: (env) => {
-      const child = spawn(install.launcher!, [join(runtimeDir, EMULATOR_EXE), streamArg(quarkId)], {
-        cwd: runtimeDir,
-        env: { ...process.env, ...env },
-        stdio: 'ignore',
-      });
+      // FBNeo divides by the screen size while sizing its window: a sleeping Mac display (size 0)
+      // crashes it. Keep the display awake for as long as this process runs.
+      const awake = install.platform === 'darwin' ? spawn('caffeinate', ['-d', '-u', '-w', String(process.pid)], { stdio: 'ignore' }) : null;
+      awake?.on('error', () => {});
+      const { command, args } = emulatorCommand(install, runtimeDir, quarkId);
+      const child = spawn(command, args, { cwd: runtimeDir, env: { ...process.env, ...env }, stdio: 'ignore' });
+      child.on('exit', () => awake?.kill());
       return wrap(child, async () => {
-        await run(install.launcher!, ['taskkill', '/IM', EMULATOR_EXE, '/F'], { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs });
+        const kill = killCommand(install);
+        await run(kill.command, kill.args, { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs }).catch(() => {});
         child.kill('SIGKILL');
       });
     },

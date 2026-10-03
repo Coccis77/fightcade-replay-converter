@@ -62,7 +62,7 @@ export function defaultDeps(): ConvertDeps {
     ensureEmulator: (install, force) => ensureEmulator(force, defaultEnsureDeps(install, paths)),
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, paths.runtimeDir, refreshDlls),
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
-    capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, paths.runtimeDir, quarkId), opts),
+    capture: (install, quarkId, opts) => capture(defaultCaptureDeps(install, paths.runtimeDir, quarkId, 'ffmpeg'), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
     },
