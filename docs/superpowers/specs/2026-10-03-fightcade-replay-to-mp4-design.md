@@ -1,188 +1,173 @@
-# Fightcade Replay → MP4 Converter — Design
+# Fightcade Replay → MP4 Converter — Design (rev 2)
 
 Date: 2026-10-03
-Status: Draft, pending spike findings (see §9)
+Status: Revised after the feasibility spikes (see `docs/spike-findings.md`). Rev 1 relied on
+FBNeo's built-in AVI writer, which records only one frame under Wine; rev 2 builds a patched
+Fightcade FBNeo that streams raw frames to ffmpeg.
 
 ## 1. Goal
 
 Turn a Fightcade replay (link or quark ID) into a shareable MP4 video.
 
-- **Final objective:** a hosted service — a user drops a replay link, the server returns an MP4.
-- **This spec (v1):** a cross-platform CLI (macOS first, Windows second) whose core is a library
-  function `convert()` that the future server can call unchanged.
-- **Scope:** Street Fighter III: 3rd Strike only (`sfiii3nr1`), via Fightcade's FBNeo build
-  (`fcadefbneo.exe`). Flycast games and other titles are out of scope.
+- **Purpose:** a free, non-commercial community tool, so people can get their replays as videos and
+  re-watch specific rounds (Fightcade's replay viewer can't).
+- **Final objective:** a hosted service: drop a replay link, get an MP4.
+- **This spec (v1):** a CLI (macOS first, Windows second) whose core is a library function
+  `convert()` that the future server can call unchanged.
+- **Scope:** Street Fighter III: 3rd Strike only (`sfiii3nr1`).
 
 ### Success criteria
 
-1. `fc2mp4 <link-or-quarkId>` produces an MP4 without any manual interaction with the emulator.
-2. Output is 1440×1080 (4:3, square pixels), H.264 + AAC, `+faststart`, plays on YouTube/Discord.
-3. Video contains every emulated frame and continuous audio for the replay.
-4. With fast-forward enabled, conversion is meaningfully faster than real time (target: measured
-   in the spike, not assumed).
-5. The user's Fightcade configuration is identical before and after a run, including after crashes
-   or Ctrl-C.
+1. `fc2mp4 <link-or-quarkId>` produces an MP4 with no manual interaction.
+2. Output is 1440×1080 (4:3, square pixels), H.264 + AAC, `+faststart`.
+3. The video contains every emulated frame and continuous audio (video and audio lengths agree to
+   within one frame).
+4. Capture runs faster than real time (the spike measured ≈6×; the overall conversion is then bounded
+   by encoding speed).
+5. Nothing inside the Fightcade install is modified.
+6. A Fightcade update never silently breaks conversions: the emulator is rebuilt from the latest
+   source, and if that fails the last working build is kept.
 
-## 2. Background and verified facts
+## 2. Verified facts (from the spikes)
 
-Facts verified by inspecting the local install (`/Applications/FightCade2.app`, FBNeo
-v0.2.97.44-55):
-
-- Launch on macOS: from `Contents/MacOS/emulator/fbneo`, run
-  `/Applications/FightCade2.app/Contents/Resources/wine.sh fcadefbneo.exe sfiii3nr1`.
-  `wine.sh` sets `WINEPREFIX=.../Resources/.wine32`, `WINEARCH=win32`.
-- Replays are inputs only, stored server-side, identified by a quark ID. The emulator accepts
-  `quark:stream,<game>,<quarkId>,<port>` (format string `quark:stream,%[^,],%[^,],%d`) and fetches
-  the replay from Fightcade's GGPO replay server itself. **We never request the Fightcade website**,
-  so its anti-bot protection is irrelevant; the link is only parsed as a string.
-- Built-in AVI writer: output to `.\avi\` named `%s_%X.avi`; `nAvi3x` in
-  `config/fcadefbneo.ini` selects 1x–3x output size. The binary does not import `AVISaveOptions`
-  (so likely no codec-picker dialog — to verify).
-- Menu command IDs (from the exe's `RT_MENU` resources):
-  - `11827` Record AVI, `11828` Stop recording
-  - `10724` / `10725` / `10726` AVI Writer output size 1x / 2x / 3x
-- Lua 5.1 is embedded but exposes no AVI API, and `quark:stream` does not load a script. Lua is
-  not used.
-- Fast-forward exists as an input macro: `macro "System FFWD" undefined` in
-  `config/games/sfiii3nr1.ini`. Keyboard bindings use DirectInput scan codes
-  (e.g. `switch 0x46` = Scroll Lock).
-- Native resolution is 384×224, displayed at 4:3 on original hardware (non-square pixels).
-- `bAutoPause 1` is set by default: FBNeo pauses when its window loses focus, so it must be patched
-  to `0` for unattended capture. The window title starts with `Fightcade FBNeo v`.
-- The AVI file name pattern `%s_%X.avi` suggests FBNeo splits recordings into several segments
-  (uncompressed 384×224@60 is roughly 15 MB/s). The pipeline handles a list of segments (joined
-  with ffmpeg's concat demuxer), and preflight checks free disk space.
-- Wine ships `taskkill`, used to stop the emulator (`wine.sh taskkill /IM fcadefbneo.exe /F`).
-
-Unknown, to be resolved by the spike (§9): the `quark:stream` port, whether the stream starts
-without the Fightcade client running, end-of-replay behaviour, FFWD behaviour in stream mode and
-its effect on AVI frames/audio, the AVI codec, and when `record` can safely be sent.
+- Replays are input streams served by Fightcade. Fightcade's emulator plays one with
+  `fcadefbneo.exe quark:stream,sfiii3nr1,<quarkId>.7,7100`: port 7100, and the client appends `.7`
+  to the quark ID from the link (without it the game never loads; meaning unknown, treated as a
+  constant). We never request the Fightcade website.
+- On macOS the emulator runs through Fightcade's Wine (`Contents/Resources/wine.sh`), and the exe
+  must be given as an absolute path.
+- Fightcade's FBNeo source is public (`github.com/fightcadeorg/fightcade-fbneo`, no tags or releases).
+  Its network library `ggponet.dll` is closed (header + import lib only), so we use the copy from the
+  Fightcade install.
+- The source cross-compiles on macOS with mingw-w64 (i686) from the VS2015 project's file list
+  (1094 files, ~1 min on 10 cores), with: host-built generators + perl scripts, three MSVC-isms
+  handled by flags/one-line patches, a stub for the MSVC-asm `hq_shared32.cpp`, a per-file rename for
+  `luaengine.cpp`, and FBNeo's bundled XAudio2 2.7 header.
+- Our build runs under Fightcade's Wine with `nVidSelect 0` (DirectDraw) and `bVidFullStretch 1`; the
+  DX9 Alt renderer crashes it.
+- Dump hook: after each frame in `RunFrame` (`run.cpp`), with `bDraw` forced on. Format: BGRA (`bgr0`)
+  384×224 @ 59.59 fps (`nBurnFPS` = 5959), s16le stereo 44.1 kHz. Forcing the fast-forward loop
+  (`bAppDoFast` branch) while dumping gave ≈6.3× real time, with every frame.
+- End of a replay: the stream does not disconnect; the emulator waits for input and stops producing
+  frames. A real disconnect calls `QuarkFinishReplay()`.
+- A Win32 program under Fightcade's Wine can write to a macOS FIFO (206 MB in 2.4 s), so frames can be
+  streamed into ffmpeg without temp files (raw is ≈20 MB per second of replay).
+- `wine.sh taskkill /IM <exe> /F` stops a Wine process cleanly.
 
 ## 3. Usage
 
 ```
-fc2mp4 <link-or-quarkId> [-o out.mp4] [--scale sharp|smooth] [--no-ffwd]
-       [--max-duration 60m] [--fightcade-dir <path>] [--keep-avi] [--verbose]
+fc2mp4 <link-or-quarkId> [-o out.mp4] [--scale sharp|smooth] [--max-duration 60m]
+       [--fightcade-dir <path>] [--verbose]
+fc2mp4 rebuild-emulator [--fightcade-dir <path>] [--verbose]
 ```
 
-- Accepts a full replay URL containing `sfiii3nr1/<quarkId>` or a bare quark ID
-  (`<digits>-<digits>`).
-- Default output: `<videos>/Fightcade/<quarkId>.mp4`, where `<videos>` is `~/Movies` on macOS and
-  `%USERPROFILE%\Videos` on Windows. The folder is created if missing. `-o` accepts a file path, or
-  an existing directory (the `<quarkId>.mp4` name is kept). The final path is printed at the end.
-  Never write inside the Fightcade install: on macOS it lives inside the signed app bundle and is
-  replaced by updates.
-- `--scale sharp` (default): nearest-neighbour integer upscale, then smooth scale to 1440×1080.
-  `--scale smooth`: lanczos straight to 1440×1080.
+- Input: a link containing `sfiii3nr1/<quarkId>` (any scheme, query or trailing slash) or a bare quark
+  ID (`<digits>-<digits>`); other games are rejected.
+- Default output: `<videos>/Fightcade/<quarkId>.mp4` (`~/Movies` on macOS, `%USERPROFILE%\Videos` on
+  Windows); `-o` accepts a file or an existing directory. The final path is printed.
+- `--scale sharp` (default): nearest-neighbour ×4 then lanczos to 1440×1080; `smooth`: lanczos only.
 
 ## 4. Architecture
 
-TypeScript on Node. The CLI is a thin shell over `convert(ref, options, onProgress)`.
+Two parts: the **emulator build** (patch + compile Fightcade FBNeo) and the **converter** (TypeScript,
+Node ≥ 22.12). Both are driven by the same CLI.
 
-| Unit | Responsibility | Depends on |
-|---|---|---|
-| `parseReplayRef` | link/ID → `{ game, quarkId }`; rejects non-`sfiii3nr1` | nothing (pure) |
-| `FightcadeInstall` | locate install (default macOS/Windows paths or `--fightcade-dir`), expose paths to exe, ini files, `avi/`, ROM; preflight checks | filesystem |
-| `ConfigPatcher` | back up and patch `fcadefbneo.ini` / `games/sfiii3nr1.ini` (`bAutoPause 0`, `bAlwaysProcessKeyboardInput 1`, `nAvi3x 1`, FFWD binding); restore; recover from a stale `.bak` | filesystem |
-| `EmulatorRunner` | spawn the emulator with `quark:stream`, via `wine.sh` on macOS or natively on Windows; wait for the window; kill the process tree | `FightcadeInstall`, `FbneoCtl` |
-| `FbneoCtl` | TypeScript wrapper that runs the `fbneo-ctl.exe` helper | helper exe |
-| `RecordingWatcher` | find the new AVI, track growth, decide when the replay has ended | filesystem, clock |
-| `Transcoder` | build and run the ffmpeg command, AVI segment(s) → MP4 (encoded to `.part.mp4`, then renamed); optional trimming of dead time | ffmpeg |
-| `convert()` | orchestrate, lock, clean up, report progress | all of the above |
+### 4.1 Emulator build ("patcher")
 
-### 4.1 `fbneo-ctl.exe` helper
+| Unit | Responsibility |
+|---|---|
+| `emulator/patches.json` | Anchored source patches: each names a file, an exact anchor snippet and its replacement. Applying is idempotent (skipped when the replacement is already present); a missing anchor is a hard error naming the file and patch. |
+| `emulator/src/fc2mp4_dump.cpp` | Added source: dump + end detection (below). |
+| `emulator/stubs/hq_shared32.cpp` | Replaces the MSVC-asm scaler helpers. |
+| `emulator/build.py` | Fetch source (git, latest `master` or `--ref`), apply patches, run generators, cross-compile, link; writes `fcadefbneo-fc2mp4.exe` + `build-info.json` (source commit, patch set version). |
+| `src/emulatorBuild.ts` | TypeScript side: decides when to (re)build, runs `build.py`, keeps the last good build. |
 
-A small Win32 C program (built with mingw-w64 `i686`, committed prebuilt along with its source
-and a build script). It runs under the same `wine.sh` on macOS (same prefix and wineserver, so it
-can see the emulator window) and natively on Windows.
+Patch behaviour inside the emulator, active only when the `FC2MP4_VIDEO` / `FC2MP4_AUDIO` environment
+variables give output paths (Windows paths, e.g. `Z:\...\video.fifo`):
 
-```
-fbneo-ctl.exe wait [timeoutMs]  → exit 0 when the FBNeo main window exists
-fbneo-ctl.exe record            → PostMessage(hwnd, WM_COMMAND, 11827, 0)
-fbneo-ctl.exe stop              → PostMessage(hwnd, WM_COMMAND, 11828, 0)
-fbneo-ctl.exe ffwd on|off       → SendInput key down/up with the bound scan code
-fbneo-ctl.exe status            → print the window title (for end detection)
-```
+- each frame: write the visible image rows (`nVidImageWidth × nVidImageBPP` bytes per row) and that
+  frame's audio (`nBurnSoundLen × 4` bytes); force `bDraw = 1`; take the fast-forward loop;
+- on the first frame write `FC2MP4_INFO` (key=value: width, height, bpp, fps_x100, sample_rate);
+- **end detection inside the emulator:** once frames have started, if no new frame is emulated for
+  `FC2MP4_IDLE_MS` (default 5000) of wall-clock time, or `QuarkFinishReplay()` runs, close both outputs
+  (ffmpeg then sees EOF) and exit the process.
 
-The window is located by enumerating top-level windows owned by the emulator process / matching
-its class or title (exact criterion fixed in the spike).
+Runtime folder (`~/Library/Caches/fc2mp4/runtime` on macOS, `%LOCALAPPDATA%\fc2mp4\runtime` on
+Windows): our exe, DLLs copied from Fightcade's `emulator/fbneo` folder, a link to its `ROMs` folder,
+and our own `config/fcadefbneo.ini` (`nVidSelect 0`, `bVidFullStretch 1`, `bAutoPause 0`).
+
+**When to rebuild:** `runtime/manifest.json` records the hashes of the installed `fcadefbneo.exe` and
+`ggponet.dll`, the source commit and the patch set version. Before each conversion: if the runtime is
+missing or any of these differ, rebuild (`fc2mp4 rebuild-emulator` forces it). If fetching, patching
+or building fails and a previous build exists, keep using it with a warning; with no previous build,
+fail with the patch/build error. Toolchain prerequisites (`git`, `perl`, `i686-w64-mingw32-g++`) are
+checked first, with an install hint (`brew install mingw-w64`).
+
+**Designed for CI later (option B):** `build.py` is self-contained (inputs: source ref + patches;
+outputs: exe + `build-info.json`), so a scheduled GitHub Action can run it and publish the artifact;
+the converter would then download a build matching the manifest instead of compiling.
+
+### 4.2 Converter
+
+| Unit | Responsibility |
+|---|---|
+| `parseReplayRef` | link/ID → `{ game, quarkId }`, rejects non-`sfiii3nr1` |
+| `resolveOutputPath` | default/`-o` output path per OS |
+| `FightcadeInstall` | locate the install (default paths or `--fightcade-dir`), expose wine.sh, DLL folder, ROMs, exe/dll paths; preflight (ROM, wine.sh, ffmpeg, toolchain when a build is needed) |
+| `emulatorBuild` | manifest check, rebuild, last-good fallback (4.1) |
+| `runtime` | create/refresh the runtime folder (DLL copies, ROMs link, our ini) |
+| `capture` | create two FIFOs in a temp dir, start ffmpeg reading them, start the emulator with the env vars, wait for both to exit, enforce `--max-duration`, kill both on error/Ctrl-C |
+| `ffmpegArgs` | raw inputs (`-f rawvideo -pix_fmt bgr0 -s WxH -r fps` / `-f s16le -ar rate -ac 2`) → 1440×1080 H.264 (`-preset medium -crf 18 -pix_fmt yuv420p`) + AAC 192k, `+faststart`, written to `<out>.part.mp4` then renamed |
+| `lock` | one conversion at a time (one runtime folder) |
+| `convert()` | orchestration + progress (`building emulator → connecting → capturing (N frames, ×speed) → finalizing`) |
+
+ffmpeg needs the frame size before it starts. It is fixed for `sfiii3nr1` (384×224, bpp 4, 59.59 fps,
+44.1 kHz) and kept as constants; the emulator's `FC2MP4_INFO` file is checked against them on the first
+frame, and a mismatch aborts with a clear error rather than producing a garbled video.
 
 ## 5. Data flow
 
-1. Parse input → `{ sfiii3nr1, quarkId }`.
-2. Preflight (install, ROM, ffmpeg, no running emulator) and acquire the lock.
-3. `ConfigPatcher.apply()` (writes a `.bak` first).
-4. Spawn the emulator: `fcadefbneo.exe sfiii3nr1 quark:stream,sfiii3nr1,<quarkId>,<port>`.
-5. `fbneo-ctl wait` → `fbneo-ctl record` (at the point the spike shows is safe) →
-   `fbneo-ctl ffwd on` (unless `--no-ffwd`).
-6. `RecordingWatcher` monitors until the end is detected (§6).
-7. `ffwd off` → `stop` → wait for the AVI size to settle → kill the emulator process tree.
-8. `ConfigPatcher.restore()`, release the lock.
-9. `Transcoder`: AVI → MP4 (1440×1080, `libx264 -crf 18 -preset slow -pix_fmt yuv420p`,
-   AAC 192k, `-movflags +faststart`, `setsar=1`).
-10. Delete the temp AVI from `fbneo/avi/` (FBNeo's fixed output dir) unless `--keep-avi`, in which
-    case move it next to the MP4.
+1. Parse input → quark ID. Resolve output path. Acquire lock.
+2. Locate Fightcade; preflight.
+3. `emulatorBuild.ensure()` → exe path (rebuilds if needed).
+4. `runtime.prepare()`.
+5. `mkfifo video.fifo audio.fifo` in a temp dir; spawn ffmpeg reading both (it blocks until the
+   emulator opens them).
+6. Spawn the emulator (`wine.sh <abs exe> quark:stream,sfiii3nr1,<quarkId>.7,7100`) with
+   `FC2MP4_VIDEO`/`FC2MP4_AUDIO`/`FC2MP4_INFO` set.
+7. Watch: emulator exit (normal end), ffmpeg exit, progress from ffmpeg `-progress` (frames), a
+   "never started" timeout (60 s without a first frame), `--max-duration`, and Ctrl-C.
+8. On emulator exit: wait for ffmpeg to finish; rename `.part.mp4` → output.
+9. Always: kill leftovers (`wine.sh taskkill /IM fcadefbneo-fc2mp4.exe /F`, ffmpeg), remove the temp dir,
+   release the lock.
 
-Steps 7–8 also run from `finally` and from SIGINT/SIGTERM handlers.
+## 6. Error handling
 
-## 6. End-of-replay detection
+- Distinct exit codes: Usage 2, Preflight 3, Busy 4, Emulator 5 (build or run), Recording 6 (stream
+  never started, frame-format mismatch), Encode 7, Interrupted 130, unexpected 1.
+- Patch failures name the file and patch; build failures keep the compiler output in
+  `runtime/build.log` and print its path.
+- A conversion that hits `--max-duration` finishes the video it has and warns.
+- An existing output file is replaced only after the new encode succeeds (`.part.mp4` + rename).
 
-Layered, first signal wins:
+## 7. Testing
 
-1. **Emulator signal (primary):** process exit, window title change, or another observable marker,
-   chosen in the spike.
-2. **AVI stall (fallback):** AVI size unchanged for 5 s of real (wall-clock) time.
-3. **Safety cap:** `--max-duration` (default 60 min of capture). On hitting the cap, stop cleanly,
-   encode what was captured, and print a warning.
+- **Unit (vitest):** `parseReplayRef`; output paths; patch application (anchor found / missing /
+  already applied, on fixture files); manifest decision (fresh, unchanged, Fightcade updated, patch set
+  changed, build failed with/without a last good build); runtime ini generation; ffmpeg arguments;
+  `capture` orchestration with fake processes (normal end, never started, max-duration, Ctrl-C cleanup).
+- **Emulator build test (opt-in, `FC_BUILD=1`):** run `build.py` against the latest source; assert the
+  exe exists and imports `ggponet.dll`.
+- **End-to-end (opt-in, `FC_E2E=<link>`):** convert a real replay; `ffprobe` checks 1440×1080, h264 +
+  aac, audio/video durations within one frame of each other, and optionally the expected duration.
 
-Optional (kept only if the spike shows dead time in the output): trim leading black/connection
-frames and trailing frozen frames with ffmpeg `blackdetect` / `freezedetect`.
+## 8. Out of scope (v1)
 
-## 7. Error handling
-
-- Preflight also checks the ROM, the game config, `wine.sh`, ffmpeg and free disk space.
-- Preflight errors include a fix hint (e.g. "ffmpeg not found → `brew install ffmpeg`").
-- A lock file prevents concurrent runs. The run refuses to start if an `fcadefbneo.exe` process
-  is already running.
-- Timeouts: window 30 s; AVI file appearing after `record` 15 s; first AVI growth (stream started)
-  60 s.
-- Each failure class maps to a distinct, documented exit code.
-- A stale `.bak` from a crashed run is restored automatically at the next start, before anything
-  else.
-- Progress phases: `connecting → recording (×N speed, frames) → encoding (%)`. `--verbose` prints
-  the commands that are run.
-
-## 8. Testing
-
-- **Unit (vitest):** `parseReplayRef`; output path resolution (default per OS, `-o` file vs directory); `ConfigPatcher` patch/restore/stale-backup recovery
-  (temp dirs); ffmpeg argument builder; `RecordingWatcher` end detection using a fake clock and
-  simulated file sizes.
-- **Integration (opt-in, `FC_E2E=1`):** real short quark → MP4; assert with `ffprobe` 1440×1080,
-  h264 + aac, an audio stream present, duration within tolerance of the expected value.
-
-## 9. Feasibility spike (first implementation task)
-
-Throwaway scripts that answer these questions. Findings go into `docs/spike-findings.md`, and this
-spec is updated before the remaining tasks start.
-
-1. `quark:stream` port, and whether the stream works without the Fightcade client running.
-2. Does `PostMessage(WM_COMMAND, 11827/11828)` start and stop the AVI under Wine? Any dialog?
-3. Which codec FBNeo selects, and how to get lossless/uncompressed output (and the effect of
-   `nAvi3x`).
-4. When `record` can be sent safely (immediately vs after the stream starts).
-5. FFWD: does `SendInput` on the bound key work (with `bAlwaysProcessKeyboardInput 1`, without
-   focus)? Is it honoured in stream mode? Does the AVI keep every frame (frame count ≈ duration
-   × 59.6) and continuous audio? Measured speedup.
-6. What happens at the end of a stream (exit / title / freeze / message)?
-7. Whether and where the AVI splits into segments; bytes per second (sets the free-space threshold);
-   whether `wine.sh taskkill` stops the emulator cleanly.
-
-If FFWD fails any check, v1 ships with real-time capture (FFWD stays behind a flag for later).
-
-## 10. Out of scope (v1)
-
-- Hosted web service, queueing, uploads (future: wraps `convert()` in a worker).
-- Headless/libretro rendering by decoding the GGPO replay protocol (future server-grade path).
-- Games other than `sfiii3nr1`; Flycast.
-- Overlays, player names, cutting to specific rounds, custom resolutions.
-- Linux: same Wine-based mechanism as macOS, best-effort after macOS and Windows work (not tested in v1).
+- The CI-published emulator builds (option B), the hosted service, uploads.
+- Replacing `ggponet.dll` (so Fightcade stays a requirement: Wine, `ggponet.dll`, ROM).
+- Games other than `sfiii3nr1`; Flycast; Linux (same Wine approach, later).
+- Round detection / cutting (a valued follow-up: the frame-exact dump makes it possible later).
+- Windows: install/runtime paths and the no-Wine launch are designed in, but the frame transport uses
+  POSIX FIFOs; Windows needs named pipes (`\\.\pipe\...`) in both the patch and `capture`. v1 is
+  supported and tested on macOS only; Windows is the first follow-up.
