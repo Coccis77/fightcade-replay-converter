@@ -18,7 +18,7 @@ RUN userdel -r ubuntu \
  && chown fc2mp4:fc2mp4 /videos
 COPY --chmod=755 fc2mp4-linux-x64 /usr/local/bin/fc2mp4
 USER fc2mp4
-ENV FC2MP4_FIGHTCADE_DIR=/fightcade FC2MP4_OUTPUT_DIR=/videos FC2MP4_HOST=0.0.0.0
+ENV FC2MP4_FIGHTCADE_DIR=/fightcade FC2MP4_OUTPUT_DIR=/videos FC2MP4_HOST=0.0.0.0 FC2MP4_DOCKER=1
 EXPOSE 8080
 # The emulator and the Wine environment live in the image: every container starts converting at once.
 # GITHUB_TOKEN (optional BuildKit secret "gh") avoids the API rate limit on shared CI runners; it is not
