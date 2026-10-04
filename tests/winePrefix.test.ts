@@ -4,7 +4,7 @@ import type { RunFn } from '../src/exec.js';
 import { ExitCode } from '../src/errors.js';
 
 const PREFIX = '/home/a/.cache/fc2mp4/wineprefix';
-const READY = `${PREFIX}/.fc2mp4-ready`;
+const READY = `${PREFIX}/.fc2mp4-ready-2`;
 
 describe('wineEnv', () => {
   it('uses our own 32-bit prefix and never prompts for Mono/Gecko', () => {
@@ -28,6 +28,9 @@ describe('ensureWinePrefix', () => {
       writeMarker: async (p: string) => {
         files.add(p);
       },
+      removeDir: async (p: string) => {
+        calls.push(`rm ${p}`);
+      },
       run,
     };
     return { calls, envs, files, deps };
@@ -42,19 +45,33 @@ describe('ensureWinePrefix', () => {
     expect(announced).toBe(false);
   });
 
-  it('creates the prefix headless, sets the virtual desktop, waits for Wine, then marks it ready', async () => {
+  it('starts from an empty prefix, sets the null display driver, waits for Wine, then marks it ready', async () => {
     const f = fake();
     let announced = false;
     await ensureWinePrefix(PREFIX, { ...f.deps, onSetup: () => (announced = true) });
     expect(announced).toBe(true);
     expect(f.calls).toEqual([
-      'xvfb-run -a wine wineboot -i',
-      'xvfb-run -a wine reg add HKCU\\Software\\Wine\\Explorer /v Desktop /d Default /f',
-      'xvfb-run -a wine reg add HKCU\\Software\\Wine\\Explorer\\Desktops /v Default /d 1024x768 /f',
+      `rm ${PREFIX}`,
+      'wine wineboot -i',
+      'wine reg add HKCU\\Software\\Wine\\Drivers /v Graphics /d null /f',
       'wineserver -w',
     ]);
     expect(f.envs[0]).toMatchObject({ WINEPREFIX: PREFIX, WINEDLLOVERRIDES: 'mscoree,mshtml=' });
     expect(f.files.has(READY)).toBe(true);
+  });
+
+  it('recreates a prefix set up by an older fc2mp4 (virtual desktop, old marker)', async () => {
+    const f = fake();
+    f.files.add(`${PREFIX}/.fc2mp4-ready`);
+    await ensureWinePrefix(PREFIX, f.deps);
+    expect(f.calls[0]).toBe(`rm ${PREFIX}`);
+    expect(f.files.has(READY)).toBe(true);
+  });
+
+  it('never needs a display: no xvfb-run anywhere', async () => {
+    const f = fake();
+    await ensureWinePrefix(PREFIX, f.deps);
+    expect(f.calls.some((c) => c.includes('xvfb-run'))).toBe(false);
   });
 
   it('turns "wine32 is missing" into the apt hint and does not mark the prefix ready', async () => {

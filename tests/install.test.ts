@@ -100,29 +100,26 @@ describe('Linux Fightcade files', () => {
       hint: expect.stringMatching(/emulator\/fbneo\/ggponet\.dll.*ggponet\.dll/),
     });
   });
-  it('needs wine and xvfb-run on Linux, with the apt hint', async () => {
+  it('needs wine on Linux, with the apt hint', async () => {
     const i = installLayout('/srv/fightcade', 'linux');
     await expect(preflight(i, { exists: async () => true, which })).resolves.toBeUndefined();
-    await expect(preflight(i, { exists: async () => true, which: async (c) => (c === 'xvfb-run' ? null : `/usr/bin/${c}`) })).rejects.toMatchObject({
+    await expect(preflight(i, { exists: async () => true, which: async (c) => (c === 'wine' ? null : `/usr/bin/${c}`) })).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
-      message: expect.stringContaining('xvfb-run'),
-      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb pulseaudio ffmpeg',
+      message: expect.stringContaining('wine'),
+      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg',
     });
   });
 });
 
 describe('checkTools', () => {
-  it('needs wine and xvfb-run on Linux only, with the apt hint', async () => {
+  it('needs only wine on Linux, with the apt hint', async () => {
     await expect(checkTools('linux', async (c) => (c === 'wine' ? null : `/usr/bin/${c}`))).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
       message: 'Missing on this system: wine',
-      hint: expect.stringContaining('apt install'),
+      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg',
     });
-    await expect(checkTools('linux', async (c) => (c === 'pulseaudio' ? null : `/usr/bin/${c}`))).rejects.toMatchObject({
-      message: 'Missing on this system: pulseaudio',
-      hint: expect.stringContaining('pulseaudio'),
-    });
-    await expect(checkTools('linux', async (c) => `/usr/bin/${c}`)).resolves.toBeUndefined();
+    // Xvfb and PulseAudio are no longer needed.
+    await expect(checkTools('linux', async (c) => (c === 'wine' ? '/usr/bin/wine' : null))).resolves.toBeUndefined();
     await expect(checkTools('darwin', async () => null)).resolves.toBeUndefined();
     await expect(checkTools('win32', async () => null)).resolves.toBeUndefined();
   });

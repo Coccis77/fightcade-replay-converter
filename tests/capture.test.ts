@@ -206,11 +206,10 @@ describe('headless launch on Linux', () => {
   const rt = '/home/a/.cache/fc2mp4/runtime';
   const prefix = '/home/a/.cache/fc2mp4/wineprefix';
 
-  it('always runs under a virtual display, launching the emulator directly so its exit code comes back', () => {
-    // The virtual desktop is configured in our prefix's registry at setup (no `explorer /desktop`).
+  it('launches the emulator with plain wine: no display needed, its exit code comes back', () => {
     expect(emulatorCommand(linux, rt, '1-2')).toEqual({
-      command: 'xvfb-run',
-      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', `${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
+      command: 'wine',
+      args: [`${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
     });
   });
 
@@ -236,7 +235,7 @@ describe('headless launch on Linux', () => {
 });
 
 describe.skipIf(process.platform === 'win32')('sweepProcessGroup', () => {
-  it('stops what the emulator process group left behind (e.g. Xvfb after xvfb-run was killed)', async () => {
+  it('stops what the emulator process group left behind', async () => {
     const child = spawn('sh', ['-c', 'sleep 30 & echo $!'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
     child.stdout!.on('data', (d) => (out += d));

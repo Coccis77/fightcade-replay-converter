@@ -2,7 +2,7 @@ import type { EventEmitter } from 'node:events';
 import { ExitCode } from './errors.js';
 
 // First Ctrl-C stops cleanly (emulator, Wine, ffmpeg, temp files); a second one forces the exit.
-// SIGHUP (SSH session closed) and SIGTERM stop cleanly too, so a server never keeps Xvfb/Wine around.
+// SIGHUP (SSH session closed) and SIGTERM stop cleanly too, so a server never keeps Wine around.
 export function installSignalHandlers(
   proc: EventEmitter,
   controller: AbortController,

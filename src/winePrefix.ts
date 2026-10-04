@@ -11,14 +11,15 @@ export function wineEnv(prefix: string): Record<string, string> {
   return { WINEARCH: 'win32', WINEPREFIX: prefix, WINEDEBUG: '-all', WINEDLLOVERRIDES: 'mscoree,mshtml=' };
 }
 
-const READY_MARKER = '.fc2mp4-ready';
+// Bumped when the prefix setup changes: an older prefix (v0.4–v0.5.1: virtual desktop on Xvfb) is
+// deleted and set up again.
+const READY_MARKER = '.fc2mp4-ready-2';
 
-// Wine's virtual desktop, set once in our prefix: the emulator then runs directly under `wine`, so its
-// exit code reaches us (`wine explorer /desktop=…` would report explorer's instead).
+// Wine's null display driver, set once in our prefix: the emulator (which shows no window while
+// recording) runs with plain `wine`, without any display, and its exit code reaches us.
 const SETUP_STEPS: string[][] = [
-  ['wine', 'wineboot', '-i'],
-  ['wine', 'reg', 'add', 'HKCU\\Software\\Wine\\Explorer', '/v', 'Desktop', '/d', 'Default', '/f'],
-  ['wine', 'reg', 'add', 'HKCU\\Software\\Wine\\Explorer\\Desktops', '/v', 'Default', '/d', '1024x768', '/f'],
+  ['wineboot', '-i'],
+  ['reg', 'add', 'HKCU\\Software\\Wine\\Drivers', '/v', 'Graphics', '/d', 'null', '/f'],
 ];
 
 export async function ensureWinePrefix(
@@ -26,6 +27,7 @@ export async function ensureWinePrefix(
   deps: {
     exists(p: string): Promise<boolean>;
     writeMarker(p: string): Promise<void>;
+    removeDir(p: string): Promise<void>;
     run: RunFn;
     onSetup?: () => void;
     signal?: AbortSignal;
@@ -34,6 +36,8 @@ export async function ensureWinePrefix(
   const marker = join(prefix, READY_MARKER);
   if (await deps.exists(marker)) return;
   deps.onSetup?.();
+  // Our own cache: start clean (also replaces an older fc2mp4's prefix).
+  await deps.removeDir(prefix);
 
   const env = { ...process.env, ...wineEnv(prefix) };
   const stopWine = () => deps.run('wineserver', ['-k'], { env, timeoutMs: 15_000 }).catch(() => undefined);
@@ -43,7 +47,7 @@ export async function ensureWinePrefix(
   };
 
   for (const step of SETUP_STEPS) {
-    const result = await deps.run('xvfb-run', ['-a', ...step], { env, timeoutMs: 5 * 60_000, signal: deps.signal, detached: true });
+    const result = await deps.run('wine', step, { env, timeoutMs: 5 * 60_000, signal: deps.signal, detached: true });
     if (deps.signal?.aborted) await fail(new ConvertError(ExitCode.Interrupted, 'Interrupted'));
     const output = `${result.stdout}\n${result.stderr}`;
     if (/wine32 is missing|ELFCLASS32|wrong ELF class/i.test(output)) {
@@ -51,7 +55,7 @@ export async function ensureWinePrefix(
     }
     if (result.code !== 0) {
       const tail = output.trim().split('\n').slice(-3).join(' ');
-      await fail(new ConvertError(ExitCode.Emulator, `Could not set up Wine (${step[1]}, exit ${result.code}): ${tail}`, 'Run with -v and check your Wine installation'));
+      await fail(new ConvertError(ExitCode.Emulator, `Could not set up Wine (${step[0]}, exit ${result.code}): ${tail}`, 'Run with -v and check your Wine installation'));
     }
   }
   // Wine saves its registry lazily: wait until the wineserver has written everything.

@@ -98,7 +98,14 @@ export function defaultDeps(): ConvertDeps {
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     prepareWine: async (install, onSetup, signal) => {
       if (platform !== 'linux') return;
-      await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, writeMarker: (p) => writeFile(p, 'ok\n'), run, onSetup, signal });
+      await ensureWinePrefix(app.wineprefixDir, {
+        exists: pathExists,
+        writeMarker: (p) => writeFile(p, 'ok\n'),
+        removeDir: (p) => rm(p, { recursive: true, force: true }),
+        run,
+        onSetup,
+        signal,
+      });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
     startAudio: async (install, dir) =>

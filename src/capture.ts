@@ -51,9 +51,9 @@ export interface CaptureResult {
 export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, quarkId: string): { command: string; args: string[] } {
   const exe = pathFor(install.platform).join(runtimeDir, EMULATOR_EXE);
   if (install.platform === 'linux') {
-    // Always headless. Wine's virtual desktop (bare Xvfb fails: X_UnmapWindow BadWindow) is set in our
-    // prefix's registry at setup, so the emulator runs directly and its exit code comes back.
-    return { command: 'xvfb-run', args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', exe, streamArg(quarkId)] };
+    // No display: our prefix uses Wine's null display driver and the emulator shows no window while
+    // recording. Launched directly, so its exit code comes back.
+    return { command: 'wine', args: [exe, streamArg(quarkId)] };
   }
   if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(quarkId)] };
   return { command: exe, args: [streamArg(quarkId)] };
@@ -76,13 +76,12 @@ export function emulatorSpawnOptions(
   return {
     cwd: runtimeDir,
     env: { ...base, ...(linux ? wineEnv(winePrefix) : {}), ...env },
-    detached: linux, // own process group, so Xvfb and Wine are stopped together
+    detached: linux, // own process group, so every Wine process of the run is stopped together
     stdio: 'ignore',
   };
 }
 
-// Stop whatever is left in a process group once its leader is gone. If xvfb-run itself is killed,
-// its Xvfb would otherwise keep running, orphaned.
+// Stop whatever is left in a process group once its leader is gone (e.g. Wine helpers).
 export function sweepProcessGroup(pid: number): void {
   try {
     process.kill(-pid, 'SIGTERM');
