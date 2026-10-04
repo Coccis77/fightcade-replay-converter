@@ -209,4 +209,31 @@ describe('serve', () => {
     expect(err).toMatchObject({ message: 'Cannot write to /videos', hint: expect.stringContaining('FC2MP4_OUTPUT_DIR') });
     expect((err as ConvertError).hint).not.toContain('-o');
   });
+
+  it('answers "starting" during startup, and a failed startup frees the port and reports its error', async () => {
+    const probe = createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise((resolve) => probe.close(resolve));
+
+    let fail!: (err: unknown) => void;
+    const deps = fakeDeps({ startup: () => new Promise<void>((_resolve, reject) => (fail = reject)) });
+    const running = serve({ port, host: '127.0.0.1', signal: new AbortController().signal, log: () => {} }, deps);
+    let res: Response | undefined;
+    for (let i = 0; i < 50 && !res; i++) {
+      res = await fetch(`http://127.0.0.1:${port}/api/jobs/1-2`).catch(() => undefined);
+      if (!res) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(res!.status).toBe(503);
+    expect(await res!.json()).toEqual({ error: 'fc2mp4 is starting, try again in a moment' });
+
+    fail(new ConvertError(ExitCode.Preflight, 'Fightcade files not found'));
+    await expect(running).rejects.toMatchObject({ message: 'Fightcade files not found' });
+    const again = createServer();
+    await new Promise<void>((resolve, reject) => {
+      again.once('error', reject);
+      again.listen(port, '127.0.0.1', resolve);
+    });
+    again.close();
+  });
 });

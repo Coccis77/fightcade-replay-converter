@@ -64,7 +64,7 @@ export interface ConvertDeps {
 // The command line has -o; serve does not. The Docker advice only makes sense inside the image.
 export function notWritableHint(forServe: boolean, inDocker: boolean): string {
   const base = forServe ? 'Make it writable, or set FC2MP4_OUTPUT_DIR to another folder' : 'Choose another folder with -o, or make this one writable';
-  return inDocker ? `${base} (in Docker: the folder mounted at /videos must be writable by uid 1000)` : base;
+  return inDocker ? `${base} (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)` : base;
 }
 
 export function defaultDeps(): ConvertDeps {

@@ -90,6 +90,8 @@ jobs:
         with:
           merge-multiple: true
       - run: |
-          gh release create "${GITHUB_REF_NAME}" fc2mp4.exe fc2mp4-macos-arm64 fc2mp4-linux-x64 \
+          # A pre-release (v1.0.0-rc1) is marked as such, so it never shows as the "Latest" release.
+          case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "${GITHUB_REF_NAME}" fc2mp4.exe fc2mp4-macos-arm64 fc2mp4-linux-x64 $pre \
             --repo "${GITHUB_REPOSITORY}" --title "fc2mp4 ${GITHUB_REF_NAME}" \
             --notes "Download fc2mp4.exe (Windows), fc2mp4-macos-arm64 (macOS) or fc2mp4-linux-x64 (Linux), then run it with a Fightcade replay link. Docker: ghcr.io/coccis77/fc2mp4:${GITHUB_REF_NAME#v} (see README). Unsigned: Windows SmartScreen may ask you to confirm (More info → Run anyway)."

@@ -116,7 +116,15 @@ function listenError(err: NodeJS.ErrnoException, options: ServeOptions): Error {
 export async function serve(options: ServeOptions, deps: ServeDeps = defaultServeDeps(options)): Promise<void> {
   // The port is taken first: a port already in use shows at once, before the (possibly minute-long)
   // startup. Requests are only answered once the startup is done.
-  const server = createServer();
+  // Until the startup is done every request gets a quick 503 (the page retries): a request left
+  // unanswered would also keep server.close() from ever finishing if the startup fails.
+  let handler: ReturnType<typeof createHandler> | null = null;
+  const server = createServer((req, res) => {
+    if (handler) return handler(req, res);
+    const body = JSON.stringify({ error: 'fc2mp4 is starting, try again in a moment' });
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), Connection: 'close', 'Retry-After': '2' });
+    res.end(body);
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', (err: NodeJS.ErrnoException) => reject(listenError(err, options)));
     server.listen(options.port, options.host, () => resolve());
@@ -129,12 +137,15 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
     });
     if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
   } catch (err) {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections();
+    });
     throw err;
   }
 
   const jobs = new Jobs({ outputDir: deps.outputDir, exists: deps.exists, run: deps.run, log: options.log });
-  server.on('request', createHandler(jobs));
+  handler = createHandler(jobs);
   const port = (server.address() as AddressInfo).port;
   options.log(`Open http://${shownHost(options.host)}:${port}`);
   if (options.host === '0.0.0.0' || options.host === '::') {
