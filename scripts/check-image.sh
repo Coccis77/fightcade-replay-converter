@@ -10,7 +10,7 @@ got=$(docker run --rm "$IMAGE" --version)
 [ "$got" = "$VERSION" ] || fail "--version printed '$got', expected '$VERSION'"
 
 docker run --rm --entrypoint sh "$IMAGE" -c \
-  'test -f "$HOME/.cache/fc2mp4/runtime/fcadefbneo-fc2mp4.exe" && test -f "$HOME/.cache/fc2mp4/wineprefix/.fc2mp4-ready"' \
+  'test -f "$HOME/.cache/fc2mp4/runtime/fcadefbneo-fc2mp4.exe" && test -f "$HOME/.cache/fc2mp4/wineprefix/.fc2mp4-ready-2"' \
   || fail "the emulator or the Wine environment is missing from the image"
 
 set +e
