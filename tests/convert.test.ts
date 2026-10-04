@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEmulatorLocally, convert, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
+import { buildEmulatorLocally, convert, prepare, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
 import { installLayout } from '../src/install.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
 
@@ -23,6 +23,9 @@ function harness(over: Partial<ConvertDeps> = {}) {
     },
     checkWritable: async (dir) => {
       calls.push(`writable:${dir}`);
+    },
+    checkTools: async () => {
+      calls.push('tools');
     },
     locateFfmpeg: async (_install, signal) => {
       calls.push(signal ? 'ffmpeg:signal' : 'ffmpeg');
@@ -194,5 +197,49 @@ describe('emulator commands', () => {
     });
     await buildEmulatorLocally({}, deps);
     expect(calls).toEqual(['lock', 'ensure:false:true', 'unlock']);
+  });
+});
+
+describe('prepare', () => {
+  it('prepares tools, ffmpeg, a fresh emulator check and Wine, without Fightcade files', async () => {
+    const { deps, calls } = harness({
+      locateInstall: async () => {
+        throw new ConvertError(ExitCode.Preflight, 'Fightcade files not found');
+      },
+    });
+    const phases: string[] = [];
+    await expect(prepare({ onProgress: (e) => phases.push(e.phase) }, deps)).resolves.toEqual({ emulatorUpdated: false, warning: undefined });
+    expect(calls).toEqual(['lock', 'tools', 'ffmpeg', 'ensure:true:false', 'wine', 'unlock']);
+    expect(phases).toEqual(['preparing', 'setting-up-wine']);
+  });
+
+  it('passes on the emulator warning (offline, previous build kept)', async () => {
+    const { deps } = harness({ ensureEmulator: async () => ({ updated: false, warning: 'GitHub unreachable; using the current emulator' }) });
+    const logs: string[] = [];
+    const result = await prepare({ log: (m) => logs.push(m) }, deps);
+    expect(result.warning).toBe('GitHub unreachable; using the current emulator');
+    expect(logs).toEqual(['Warning: GitHub unreachable; using the current emulator']);
+  });
+
+  it('releases the lock and reports Interrupted when stopped during Wine setup', async () => {
+    const controller = new AbortController();
+    const { deps, calls } = harness({
+      prepareWine: async () => {
+        controller.abort();
+        throw new Error('wineboot killed');
+      },
+    });
+    await expect(prepare({ signal: controller.signal }, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
+    expect(calls.at(-1)).toBe('unlock');
+  });
+
+  it('stops at missing tools with the install hint, before any download', async () => {
+    const { deps, calls } = harness({
+      checkTools: async () => {
+        throw new ConvertError(ExitCode.Preflight, 'Missing on this system: wine', 'sudo apt install wine');
+      },
+    });
+    await expect(prepare({}, deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, message: 'Missing on this system: wine' });
+    expect(calls).toEqual(['lock', 'unlock']);
   });
 });

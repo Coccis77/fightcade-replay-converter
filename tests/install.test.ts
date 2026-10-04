@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { installLayout, locateInstall, preflight } from '../src/install.js';
+import { checkTools, installLayout, locateInstall, preflight } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
 const MAC_ROOT = '/Applications/FightCade2.app';
@@ -108,5 +108,18 @@ describe('Linux Fightcade files', () => {
       message: expect.stringContaining('xvfb-run'),
       hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb ffmpeg',
     });
+  });
+});
+
+describe('checkTools', () => {
+  it('needs wine and xvfb-run on Linux only, with the apt hint', async () => {
+    await expect(checkTools('linux', async (c) => (c === 'wine' ? null : `/usr/bin/${c}`))).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      message: 'Missing on this system: wine',
+      hint: expect.stringContaining('apt install'),
+    });
+    await expect(checkTools('linux', async (c) => `/usr/bin/${c}`)).resolves.toBeUndefined();
+    await expect(checkTools('darwin', async () => null)).resolves.toBeUndefined();
+    await expect(checkTools('win32', async () => null)).resolves.toBeUndefined();
   });
 });

@@ -54,10 +54,14 @@ describe('parseCli', () => {
     expect(parseCli(['update-emulator'])).toEqual({ command: 'update-emulator', fightcadeDir: undefined, verbose: false });
     expect(parseCli(['rebuild-emulator', '--fightcade-dir', '/F'])).toEqual({ command: 'rebuild-emulator', fightcadeDir: '/F', verbose: false });
   });
+  it('parses prepare', () => {
+    expect(parseCli(['prepare'])).toEqual({ command: 'prepare', verbose: false });
+    expect(parseCli(['prepare', '-v'])).toEqual({ command: 'prepare', verbose: true });
+  });
   it('returns help', () => {
     expect(parseCli(['--help'])).toEqual({ command: 'help' });
   });
-  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']]])('rejects %j', (argv) => {
+  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']]])('rejects %j', (argv) => {
     expect(usageError(argv)).toMatchObject({ exitCode: ExitCode.Usage });
   });
 });

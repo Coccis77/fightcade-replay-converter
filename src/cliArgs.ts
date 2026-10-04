@@ -6,6 +6,7 @@ import type { ScaleMode } from './ffmpeg.js';
 export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
+       fc2mp4 prepare [-v]
 
 Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
 
@@ -19,12 +20,14 @@ Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows
   -h, --help                Show this help
 
 update-emulator checks GitHub for a newer emulator build now (otherwise once a day).
-rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).`;
+rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).
+prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).`;
 
 export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
-  | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean };
+  | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
+  | { command: 'prepare'; verbose: boolean };
 
 export function formatReplayLength(frames: number): string {
   const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
@@ -68,6 +71,10 @@ export function parseCli(argv: string[]): CliRequest {
   const verbose = values.verbose ?? false;
 
   const command = positionals[0];
+  if (command === 'prepare') {
+    if (positionals.length !== 1) throw usage('prepare takes no arguments');
+    return { command, verbose };
+  }
   if (command === 'update-emulator' || command === 'rebuild-emulator') {
     if (positionals.length !== 1) throw usage(`${command} takes no arguments`);
     return { command, fightcadeDir: values['fightcade-dir'], verbose };

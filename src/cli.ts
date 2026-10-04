@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
-import { buildEmulatorLocally, convert, updateEmulator, type ProgressEvent } from './convert.js';
+import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { installSignalHandlers } from './signals.js';
 
@@ -41,6 +41,11 @@ async function main(): Promise<number> {
       return 0;
     }
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
+    if (request.command === 'prepare') {
+      const result = await prepare({ signal: controller.signal, log, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
+      process.stdout.write(result.emulatorUpdated ? 'Ready (emulator downloaded).\n' : 'Ready.\n');
+      return result.warning ? ExitCode.Emulator : 0;
+    }
     if (request.command !== 'convert') {
       const run = request.command === 'update-emulator' ? updateEmulator : buildEmulatorLocally;
       const result = await run({ fightcadeDir: request.fightcadeDir, log });

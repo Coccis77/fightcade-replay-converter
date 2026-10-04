@@ -87,6 +87,14 @@ export interface PreflightDeps {
   which(cmd: string): Promise<string | null>;
 }
 
+// Tools fc2mp4 cannot download itself. ffmpeg is checked where it is located (ffmpegLocator).
+export async function checkTools(platform: Platform, which: (cmd: string) => Promise<string | null>): Promise<void> {
+  if (platform !== 'linux') return;
+  const missing: string[] = [];
+  for (const tool of ['wine', 'xvfb-run']) if ((await which(tool)) === null) missing.push(tool);
+  if (missing.length > 0) throw new ConvertError(ExitCode.Preflight, `Missing on this system: ${missing.join(', ')}`, APT_HINT);
+}
+
 export async function preflight(install: FightcadeInstall, deps: PreflightDeps): Promise<void> {
   if (!(await deps.exists(install.rom))) {
     throw new ConvertError(ExitCode.Preflight, `3rd Strike ROM not found: ${install.rom}`, 'Open 3rd Strike once in Fightcade so it downloads the ROM');
@@ -94,9 +102,5 @@ export async function preflight(install: FightcadeInstall, deps: PreflightDeps):
   if (install.launcher !== null && !(await deps.exists(install.launcher))) {
     throw new ConvertError(ExitCode.Preflight, `wine.sh not found: ${install.launcher}`, 'Reinstall Fightcade');
   }
-  if (install.platform === 'linux') {
-    const missing: string[] = [];
-    for (const tool of ['wine', 'xvfb-run']) if ((await deps.which(tool)) === null) missing.push(tool);
-    if (missing.length > 0) throw new ConvertError(ExitCode.Preflight, `Missing on this system: ${missing.join(', ')}`, APT_HINT);
-  }
+  await checkTools(install.platform, deps.which);
 }

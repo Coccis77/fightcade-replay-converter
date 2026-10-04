@@ -11,7 +11,7 @@ import { ConvertError, ExitCode } from './errors.js';
 import { run, which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
-import { locateInstall, preflight, type FightcadeInstall } from './install.js';
+import { checkTools, locateInstall, preflight, type FightcadeInstall } from './install.js';
 import { acquireLock } from './lock.js';
 import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
@@ -49,10 +49,11 @@ export interface ConvertDeps {
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
   checkWritable(dir: string): Promise<void>;
-  locateFfmpeg(install: FightcadeInstall, signal?: AbortSignal): Promise<string>;
-  ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
+  checkTools(): Promise<void>;
+  locateFfmpeg(install: FightcadeInstall | null, signal?: AbortSignal): Promise<string>;
+  ensureEmulator(install: FightcadeInstall | null, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
-  prepareWine(install: FightcadeInstall, onSetup: () => void, signal?: AbortSignal): Promise<void>;
+  prepareWine(install: FightcadeInstall | null, onSetup: () => void, signal?: AbortSignal): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
@@ -69,6 +70,7 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists, which: (cmd) => which(cmd, platform) }),
+    checkTools: () => checkTools(platform, (cmd) => which(cmd, platform)),
     checkWritable: async (dir) => {
       try {
         await mkdir(dir, { recursive: true });
@@ -86,14 +88,14 @@ export function defaultDeps(): ConvertDeps {
       const dir = emulatorDir();
       const hash = await currentPatchSetHash(emulatorDir);
       const local =
-        install.platform === 'darwin' && dir !== null
+        install !== null && install.platform === 'darwin' && dir !== null
           ? () => localBuild(install, { emulatorDir: dir, sourceDir: app.sourceDir, runtimeDir: app.runtimeDir })
           : null;
       return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local, opts.signal));
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
     prepareWine: async (install, onSetup, signal) => {
-      if (install.platform !== 'linux') return;
+      if (platform !== 'linux') return;
       await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, writeMarker: (p) => writeFile(p, 'ok\n'), run, onSetup, signal });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
@@ -180,4 +182,34 @@ export function updateEmulator(options: { fightcadeDir?: string; log?: (msg: str
 
 export function buildEmulatorLocally(options: { fightcadeDir?: string; log?: (msg: string) => void }, deps: ConvertDeps = defaultDeps()): Promise<EnsureResult> {
   return runEmulatorCommand({ force: false, local: true }, options, deps);
+}
+
+export interface PrepareResult {
+  emulatorUpdated: boolean;
+  warning?: string;
+}
+
+// Everything a conversion needs except the Fightcade files: run at Docker image build time, or once on a
+// server, so later conversions start immediately.
+export async function prepare(
+  options: { signal?: AbortSignal; log?: (msg: string) => void; onProgress?: (e: ProgressEvent) => void },
+  deps: ConvertDeps = defaultDeps(),
+): Promise<PrepareResult> {
+  const release = await deps.acquireLock();
+  try {
+    await deps.checkTools();
+    options.onProgress?.({ phase: 'preparing' });
+    await deps.locateFfmpeg(null, options.signal);
+    const ensured = await deps.ensureEmulator(null, { force: true, local: false, signal: options.signal });
+    if (ensured.warning) options.log?.(`Warning: ${ensured.warning}`);
+    await deps.prepareWine(null, () => options.onProgress?.({ phase: 'setting-up-wine' }), options.signal);
+    return { emulatorUpdated: ensured.updated, warning: ensured.warning };
+  } catch (err) {
+    if (options.signal?.aborted && !(err instanceof ConvertError && err.exitCode === ExitCode.Interrupted)) {
+      throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
+    }
+    throw err;
+  } finally {
+    await release();
+  }
 }
