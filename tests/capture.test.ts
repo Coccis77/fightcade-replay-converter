@@ -199,10 +199,11 @@ describe('headless launch on Linux', () => {
   const rt = '/home/a/.cache/fc2mp4/runtime';
   const prefix = '/home/a/.cache/fc2mp4/wineprefix';
 
-  it('always runs under a virtual display with Wine’s virtual desktop', () => {
+  it('always runs under a virtual display, launching the emulator directly so its exit code comes back', () => {
+    // The virtual desktop is configured in our prefix's registry at setup (no `explorer /desktop`).
     expect(emulatorCommand(linux, rt, '1-2')).toEqual({
       command: 'xvfb-run',
-      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', 'explorer', '/desktop=fc2mp4,1024x768', `${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
+      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', `${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
     });
   });
 
@@ -210,7 +211,7 @@ describe('headless launch on Linux', () => {
     expect(killCommand(linux, prefix)).toEqual({
       command: 'wineserver',
       args: ['-k'],
-      env: { WINEARCH: 'win32', WINEPREFIX: prefix, WINEDEBUG: '-all' },
+      env: { WINEARCH: 'win32', WINEPREFIX: prefix, WINEDEBUG: '-all', WINEDLLOVERRIDES: 'mscoree,mshtml=' },
     });
   });
 

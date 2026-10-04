@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
@@ -50,7 +50,7 @@ export interface ConvertDeps {
   locateFfmpeg(install: FightcadeInstall, signal?: AbortSignal): Promise<string>;
   ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
-  prepareWine(install: FightcadeInstall, onSetup: () => void): Promise<void>;
+  prepareWine(install: FightcadeInstall, onSetup: () => void, signal?: AbortSignal): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
@@ -78,9 +78,9 @@ export function defaultDeps(): ConvertDeps {
       return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local, opts.signal));
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
-    prepareWine: async (install, onSetup) => {
+    prepareWine: async (install, onSetup, signal) => {
       if (install.platform !== 'linux') return;
-      await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, run, onSetup });
+      await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, writeMarker: (p) => writeFile(p, 'ok\n'), run, onSetup, signal });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
     capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg, install.platform === 'linux' ? app.wineprefixDir : null), opts),
@@ -113,7 +113,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.updated) debug('Emulator updated');
     await deps.prepareRuntime(install, ensured.updated);
-    await deps.prepareWine(install, () => options.onProgress?.({ phase: 'setting-up-wine' }));
+    await deps.prepareWine(install, () => options.onProgress?.({ phase: 'setting-up-wine' }), options.signal);
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });

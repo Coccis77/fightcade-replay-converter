@@ -49,11 +49,9 @@ export interface CaptureResult {
 export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, quarkId: string): { command: string; args: string[] } {
   const exe = pathFor(install.platform).join(runtimeDir, EMULATOR_EXE);
   if (install.platform === 'linux') {
-    // Always headless: a virtual display plus Wine's virtual desktop (bare Xvfb fails: X_UnmapWindow BadWindow).
-    return {
-      command: 'xvfb-run',
-      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', 'explorer', '/desktop=fc2mp4,1024x768', exe, streamArg(quarkId)],
-    };
+    // Always headless. Wine's virtual desktop (bare Xvfb fails: X_UnmapWindow BadWindow) is set in our
+    // prefix's registry at setup, so the emulator runs directly and its exit code comes back.
+    return { command: 'xvfb-run', args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', exe, streamArg(quarkId)] };
   }
   if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(quarkId)] };
   return { command: exe, args: [streamArg(quarkId)] };
