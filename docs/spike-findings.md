@@ -40,3 +40,14 @@ Conclusion: the spec's capture approach (FBNeo native AVI writer under Wine on m
 | Emulator builds on Linux? | **Yes** (Debian bookworm amd64, mingw-w64 GCC 12). Needs a host `g++` (generators) and a case fix: sources include `InitGuid.h`, mingw ships `initguid.h` (macOS is case-insensitive). Spike used a shim header via `CPLUS_INCLUDE_PATH`; build.py should create it. build.py also crashes with a traceback (not a clean error) when a tool is missing. | docker build |
 | Runs under Linux Wine + Xvfb? | **Inconclusive.** On Apple Silicon, Docker runs 32-bit x86 through QEMU (Rosetta can't run i386): 0 frames after 15 min. Also seen: no `libGL` (Wine OpenGL disabled) and no sound card (ALSA errors) in the image — both need headless fixes (Mesa, dummy audio). Needs real x86_64 Linux. | ps shows qemu-i386 |
 | Runs natively on Windows? | **Yes.** Windows 11, Ryzen 9 5900X, same exe built on macOS: exit 0 by itself after 38 s, 8220 frames, video 137.943 s / audio 137.932 s — identical to macOS. `d3dx9_43.dll` present (installed with Fightcade/DirectX). | user-run script |
+
+## Spike 4 (2026-10-04): headless Linux on real x86 (WSL2 Ubuntu 24.04, Ryzen 9 5900X)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Runs on Linux under Wine? | **Yes.** Ubuntu's stock Wine 9.0 (`wine32:i386`, WINEARCH=win32) + the CI-built UCRT emulator release, DLLs and ROMs read from the Fightcade install (ROMs via a symlink): 8220 frames, exit 0 by itself | WSLg run |
+| Headless (no real display)? | **Yes**, with `xvfb-run` + Wine's virtual desktop: `wine explorer /desktop=fc2mp4,1024x768 <exe> <args>` → 8220 frames, exit 0, 40 s (≈25 s capture + 15 s idle exit, ≈5.5× real time). Openbox on Xvfb also works (42 s) | test3 D/E |
+| Bare Xvfb? | **No**: Wine aborts with `X Error … BadWindow … X_UnmapWindow` (no window manager). Use the virtual desktop | test1, test2 C |
+| Needs to build on Linux? | **No**: the server downloads the CI release like Windows does (Debian/Ubuntu mingw links msvcrt and would break ROM loading anyway) | spike 3 + CI fix |
+| Sound card | None in WSL/servers; ALSA errors are harmless for video. Audio dump length not yet measured — check in the Linux implementation | — |
+| Prerequisite on the PC | CPU virtualization (AMD SVM) had to be enabled in the BIOS for WSL2 | user |
