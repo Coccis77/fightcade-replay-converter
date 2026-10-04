@@ -61,6 +61,12 @@ export interface ConvertDeps {
   removeDir(dir: string): Promise<void>;
 }
 
+// The command line has -o; serve does not. The Docker advice only makes sense inside the image.
+export function notWritableHint(forServe: boolean, inDocker: boolean): string {
+  const base = forServe ? 'Make it writable, or set FC2MP4_OUTPUT_DIR to another folder' : 'Choose another folder with -o, or make this one writable';
+  return inDocker ? `${base} (in Docker: the folder mounted at /videos must be writable by uid 1000)` : base;
+}
+
 export function defaultDeps(): ConvertDeps {
   const home = homedir();
   const platform = supportedPlatform(process.platform);
@@ -76,11 +82,7 @@ export function defaultDeps(): ConvertDeps {
         await mkdir(dir, { recursive: true });
         await access(dir, constants.W_OK);
       } catch {
-        throw new ConvertError(
-          ExitCode.Preflight,
-          `Cannot write to ${dir}`,
-          'Choose another folder with -o, or make this one writable (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)',
-        );
+        throw new ConvertError(ExitCode.Preflight, `Cannot write to ${dir}`, notWritableHint(false, Boolean(process.env.FC2MP4_DOCKER)));
       }
     },
     locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),
@@ -199,7 +201,7 @@ export interface PrepareResult {
 // Everything a conversion needs except the Fightcade files: run at Docker image build time, or once on a
 // server, so later conversions start immediately.
 export async function prepare(
-  options: { signal?: AbortSignal; log?: (msg: string) => void; onProgress?: (e: ProgressEvent) => void },
+  options: { signal?: AbortSignal; log?: (msg: string) => void; onProgress?: (e: ProgressEvent) => void; forceUpdate?: boolean },
   deps: ConvertDeps = defaultDeps(),
 ): Promise<PrepareResult> {
   const release = await deps.acquireLock();
@@ -207,7 +209,7 @@ export async function prepare(
     await deps.checkTools();
     options.onProgress?.({ phase: 'preparing' });
     await deps.locateFfmpeg(null, options.signal);
-    const ensured = await deps.ensureEmulator(null, { force: true, local: false, signal: options.signal });
+    const ensured = await deps.ensureEmulator(null, { force: options.forceUpdate ?? true, local: false, signal: options.signal });
     if (ensured.warning) options.log?.(`Warning: ${ensured.warning}`);
     await deps.prepareWine(null, () => options.onProgress?.({ phase: 'setting-up-wine' }), options.signal);
     return { emulatorUpdated: ensured.updated, warning: ensured.warning };

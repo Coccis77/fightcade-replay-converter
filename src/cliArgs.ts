@@ -92,7 +92,7 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
       if (!/[smhd]$/.test(values.keep.trim())) throw new ConvertError(ExitCode.Usage, `Invalid --keep "${values.keep}"`, 'Give a unit, e.g. 7d or 12h');
       keepMs = parseDuration(values.keep);
     }
-    return { command, port, host: values.host ?? env.FC2MP4_HOST ?? '127.0.0.1', fightcadeDir: values['fightcade-dir'], keepMs, verbose };
+    return { command, port, host: values.host || env.FC2MP4_HOST || '127.0.0.1', fightcadeDir: values['fightcade-dir'], keepMs, verbose };
   }
   for (const option of ['port', 'host', 'keep'] as const) {
     if (values[option] !== undefined) throw usage(`--${option} only works with fc2mp4 serve`);

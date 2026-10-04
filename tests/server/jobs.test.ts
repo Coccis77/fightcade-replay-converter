@@ -109,6 +109,14 @@ describe('Jobs', () => {
     expect(runs.map((r) => r.id)).toEqual([A]);
   });
 
+  it('accepts nothing new once stopped', async () => {
+    const { jobs, runs } = harness();
+    jobs.stop();
+    await jobs.submit(A);
+    expect(jobs.view(A)).toEqual({ state: 'failed', error: 'The server stopped' });
+    expect(runs).toEqual([]);
+  });
+
   it('knows nothing about replays never submitted', () => {
     expect(harness().jobs.view(A)).toBeNull();
   });

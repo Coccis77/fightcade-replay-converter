@@ -19,16 +19,23 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   send(res, status, 'application/json; charset=utf-8', JSON.stringify(body));
 }
 
-// The body as text, or null when it is larger than MAX_BODY (the rest is drained, not kept).
+// The body as text, or null as soon as it is larger than MAX_BODY (reading stops there).
 function readBody(req: IncomingMessage): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
-    req.on('data', (chunk: Buffer) => {
+    const onData = (chunk: Buffer) => {
       size += chunk.length;
-      if (size <= MAX_BODY) chunks.push(chunk);
-    });
-    req.on('end', () => resolve(size > MAX_BODY ? null : Buffer.concat(chunks).toString('utf8')));
+      if (size > MAX_BODY) {
+        req.off('data', onData);
+        req.pause();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    };
+    req.on('data', onData);
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
@@ -38,7 +45,12 @@ async function createJob(jobs: Jobs, req: IncomingMessage, res: ServerResponse):
   const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
   if (type !== 'application/json') return json(res, 415, { error: 'Send JSON (Content-Type: application/json)' });
   const body = await readBody(req);
-  if (body === null) return json(res, 413, { error: 'Request too large' });
+  if (body === null) {
+    // Answer now and close the connection instead of reading the rest.
+    res.setHeader('Connection', 'close');
+    res.on('finish', () => req.destroy());
+    return json(res, 413, { error: 'Request too large' });
+  }
   let url: unknown;
   try {
     url = (JSON.parse(body) as { url?: unknown }).url;

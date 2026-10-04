@@ -65,6 +65,7 @@ describe('parseCli', () => {
       command: 'serve', port: 9000, host: '0.0.0.0', fightcadeDir: '/F', keepMs: undefined, verbose: true,
     });
     expect(parseCli(['serve'], { FC2MP4_HOST: '0.0.0.0' })).toMatchObject({ host: '0.0.0.0' });
+    expect(parseCli(['serve'], { FC2MP4_HOST: '' })).toMatchObject({ host: '127.0.0.1' });
     expect(parseCli(['serve', '--keep', '7d'], {})).toMatchObject({ keepMs: 7 * 24 * 60 * 60_000 });
     expect(parseCli(['serve', '--keep', '12h'], {})).toMatchObject({ keepMs: 12 * 60 * 60_000 });
   });

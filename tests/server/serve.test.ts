@@ -14,6 +14,8 @@ function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] }
     checkWritable: async () => {},
     cleanup: { list: async () => [], mtimeMs: async () => 0, remove: async () => {}, now: () => 0 },
     schedule: () => () => {},
+    addresses: () => [],
+    inDocker: false,
     run: async (id) => {
       runs.push(id);
     },
@@ -77,11 +79,14 @@ describe('serve', () => {
     await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
     const port = (other.address() as AddressInfo).port;
     try {
-      await expect(serve({ port, host: '127.0.0.1', signal: new AbortController().signal, log: () => {} }, fakeDeps())).rejects.toMatchObject({
+      let startedUp = false;
+      const deps = fakeDeps({ startup: async () => void (startedUp = true) });
+      await expect(serve({ port, host: '127.0.0.1', signal: new AbortController().signal, log: () => {} }, deps)).rejects.toMatchObject({
         exitCode: ExitCode.Preflight,
         message: `Port ${port} is already in use`,
         hint: expect.stringContaining('--port'),
       });
+      expect(startedUp).toBe(false); // checked before the (possibly minute-long) startup
     } finally {
       other.close();
     }
@@ -161,5 +166,47 @@ describe('serve', () => {
     await running;
     expect(listed).toEqual([]);
     expect(scheduled).toBe(false);
+  });
+
+  it('explains an address that is not on this machine', async () => {
+    await expect(serve({ port: 0, host: '203.0.113.1', signal: new AbortController().signal, log: () => {} }, fakeDeps())).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      message: 'This machine has no address 203.0.113.1',
+      hint: expect.stringContaining('--host'),
+    });
+  });
+
+  it('shows the network addresses other devices can use when listening on all of them', async () => {
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const running = serve({ port: 0, host: '0.0.0.0', signal: controller.signal, log: (m) => logs.push(m) }, fakeDeps({ addresses: () => ['192.168.1.20'] }));
+    const base = await started(logs);
+    const port = base.split(':').at(-1);
+    expect(logs).toContain(`Other devices: http://192.168.1.20:${port}`);
+    controller.abort();
+    await running;
+  });
+
+  it('in Docker, points other devices to the computer address instead of the container one', async () => {
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const running = serve({ port: 0, host: '0.0.0.0', signal: controller.signal, log: (m) => logs.push(m) }, fakeDeps({ addresses: () => ['172.17.0.2'], inDocker: true }));
+    const base = await started(logs);
+    const port = base.split(':').at(-1);
+    expect(logs).toContain(`Other devices: use this computer's network address, port ${port}`);
+    expect(logs.some((l) => l.includes('172.17.0.2'))).toBe(false);
+    controller.abort();
+    await running;
+  });
+
+  it('gives a serve hint (no -o) when the output folder is not writable', async () => {
+    const deps = fakeDeps({
+      checkWritable: async () => {
+        throw new ConvertError(ExitCode.Preflight, 'Cannot write to /videos', 'Choose another folder with -o, or make this one writable');
+      },
+    });
+    const err = await serve({ port: 0, host: '127.0.0.1', signal: new AbortController().signal, log: () => {} }, deps).catch((e: ConvertError) => e);
+    expect(err).toMatchObject({ message: 'Cannot write to /videos', hint: expect.stringContaining('FC2MP4_OUTPUT_DIR') });
+    expect((err as ConvertError).hint).not.toContain('-o');
   });
 });

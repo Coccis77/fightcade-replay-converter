@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { DEFAULT_MAX_DURATION_MS } from '../constants.js';
-import { convert, defaultDeps, prepare } from '../convert.js';
+import { convert, defaultDeps, notWritableHint, prepare } from '../convert.js';
 import { ConvertError, ExitCode } from '../errors.js';
 import { pathExists } from '../fsUtil.js';
 import { appPaths, supportedPlatform } from '../platform.js';
@@ -28,6 +28,9 @@ export interface ServeDeps {
   exists(p: string): Promise<boolean>;
   cleanup: CleanupDeps;
   schedule(fn: () => void, ms: number): () => void;
+  // This machine's network addresses, shown to reach the page from other devices.
+  addresses(): string[];
+  inDocker: boolean;
 }
 
 export function defaultServeDeps(options: ServeOptions): ServeDeps {
@@ -37,6 +40,12 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
     exists: pathExists,
     checkWritable: (dir) => convertDeps.checkWritable(dir),
     cleanup: defaultCleanupDeps(),
+    addresses: () =>
+      Object.values(networkInterfaces())
+        .flat()
+        .filter((a) => a !== undefined && a.family === 'IPv4' && !a.internal)
+        .map((a) => a!.address),
+    inDocker: Boolean(process.env.FC2MP4_DOCKER),
     schedule: (fn, ms) => {
       const timer = setInterval(fn, ms);
       timer.unref();
@@ -50,6 +59,7 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
         {
           signal: options.signal,
           log: options.log,
+          forceUpdate: false, // the daily check, as for conversions
           onProgress: (e) => {
             if (e.phase === 'setting-up-wine') options.log('Setting up Wine (first run, about a minute)…');
           },
@@ -87,25 +97,51 @@ function shownHost(host: string): string {
 
 // Runs until the signal aborts (Ctrl-C, SIGTERM, SIGHUP): the current conversion is aborted by the same
 // signal, queued replays are dropped, and the server closes.
-export async function serve(options: ServeOptions, deps: ServeDeps = defaultServeDeps(options)): Promise<void> {
-  await deps.startup();
-  // A folder fc2mp4 cannot write to (a root-owned Docker mount) shows now, not on the first job.
-  await deps.checkWritable(deps.outputDir);
-  if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
+function listenError(err: NodeJS.ErrnoException, options: ServeOptions): Error {
+  switch (err.code) {
+    case 'EADDRINUSE':
+      return new ConvertError(ExitCode.Preflight, `Port ${options.port} is already in use`, 'Stop the other program, or choose another port with --port');
+    case 'EACCES':
+      return new ConvertError(ExitCode.Preflight, `Not allowed to use port ${options.port}`, 'Use a port above 1024, e.g. --port 8080');
+    case 'EADDRNOTAVAIL':
+    case 'ENOTFOUND':
+      return new ConvertError(ExitCode.Preflight, `This machine has no address ${options.host}`, 'Use --host 0.0.0.0 (all addresses), or leave --host out');
+    default:
+      return err;
+  }
+}
 
-  const jobs = new Jobs({ outputDir: deps.outputDir, exists: deps.exists, run: deps.run, log: options.log });
-  const server = createServer(createHandler(jobs));
+// Runs until the signal aborts (Ctrl-C, SIGTERM, SIGHUP): the current conversion is aborted by the same
+// signal, queued replays are dropped, and the server closes.
+export async function serve(options: ServeOptions, deps: ServeDeps = defaultServeDeps(options)): Promise<void> {
+  // The port is taken first: a port already in use shows at once, before the (possibly minute-long)
+  // startup. Requests are only answered once the startup is done.
+  const server = createServer();
   await new Promise<void>((resolve, reject) => {
-    server.once('error', (err: NodeJS.ErrnoException) =>
-      reject(
-        err.code === 'EADDRINUSE'
-          ? new ConvertError(ExitCode.Preflight, `Port ${options.port} is already in use`, 'Stop the other program, or choose another port with --port')
-          : err,
-      ),
-    );
+    server.once('error', (err: NodeJS.ErrnoException) => reject(listenError(err, options)));
     server.listen(options.port, options.host, () => resolve());
   });
-  options.log(`Open http://${shownHost(options.host)}:${(server.address() as AddressInfo).port}`);
+  try {
+    await deps.startup();
+    // A folder fc2mp4 cannot write to (a root-owned Docker mount) shows now, not on the first job.
+    await deps.checkWritable(deps.outputDir).catch((err: unknown) => {
+      throw err instanceof ConvertError ? new ConvertError(err.exitCode, err.message, notWritableHint(true, deps.inDocker)) : err;
+    });
+    if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
+  } catch (err) {
+    await new Promise((resolve) => server.close(resolve));
+    throw err;
+  }
+
+  const jobs = new Jobs({ outputDir: deps.outputDir, exists: deps.exists, run: deps.run, log: options.log });
+  server.on('request', createHandler(jobs));
+  const port = (server.address() as AddressInfo).port;
+  options.log(`Open http://${shownHost(options.host)}:${port}`);
+  if (options.host === '0.0.0.0' || options.host === '::') {
+    // Inside Docker the addresses are the container's: other devices need the computer's own.
+    if (deps.inDocker) options.log(`Other devices: use this computer's network address, port ${port}`);
+    else for (const ip of deps.addresses()) options.log(`Other devices: http://${ip}:${port}`);
+  }
 
   let cancelCleanup = () => {};
   if (options.keepMs !== undefined) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEmulatorLocally, convert, prepare, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
+import { buildEmulatorLocally, convert, notWritableHint, prepare, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
 import { installLayout } from '../src/install.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
 
@@ -241,5 +241,22 @@ describe('prepare', () => {
     });
     await expect(prepare({}, deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, message: 'Missing on this system: wine' });
     expect(calls).toEqual(['lock', 'unlock']);
+  });
+});
+
+describe('prepare without a forced update (serve startup)', () => {
+  it('uses the daily emulator check', async () => {
+    const { deps, calls } = harness();
+    await prepare({ forceUpdate: false }, deps);
+    expect(calls).toContain('ensure:false:false');
+  });
+});
+
+describe('notWritableHint', () => {
+  it('mentions -o only for the CLI, and Docker only inside Docker', () => {
+    expect(notWritableHint(false, false)).toBe('Choose another folder with -o, or make this one writable');
+    expect(notWritableHint(false, true)).toBe('Choose another folder with -o, or make this one writable (in Docker: the folder mounted at /videos must be writable by uid 1000)');
+    expect(notWritableHint(true, false)).toBe('Make it writable, or set FC2MP4_OUTPUT_DIR to another folder');
+    expect(notWritableHint(true, true)).toBe('Make it writable, or set FC2MP4_OUTPUT_DIR to another folder (in Docker: the folder mounted at /videos must be writable by uid 1000)');
   });
 });

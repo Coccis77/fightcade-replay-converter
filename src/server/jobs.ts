@@ -23,6 +23,7 @@ export class Jobs {
   private readonly views = new Map<string, JobView>();
   private readonly queue: string[] = [];
   private current: string | null = null;
+  private stopped = false;
   private worker: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: JobsDeps) {}
@@ -32,6 +33,10 @@ export class Jobs {
   }
 
   async submit(id: string): Promise<void> {
+    if (this.stopped) {
+      this.views.set(id, { state: 'failed', error: 'The server stopped' });
+      return;
+    }
     if (this.isBusy(id)) return;
     // Checked every time: a finished MP4 deleted from the folder is converted again.
     if (await this.deps.exists(this.filePath(id))) {
@@ -39,6 +44,10 @@ export class Jobs {
       return;
     }
     if (this.isBusy(id)) return; // queued by another request while we checked the folder
+    if (this.stopped) {
+      this.views.set(id, { state: 'failed', error: 'The server stopped' });
+      return;
+    }
     this.views.set(id, { state: 'queued', position: 0 });
     this.queue.push(id);
     this.deps.log?.(`Queued ${id}`);
@@ -53,6 +62,7 @@ export class Jobs {
 
   // Server stopping: queued replays are never started (the current conversion is aborted by the signal).
   stop(): void {
+    this.stopped = true;
     for (const id of this.queue.splice(0)) this.views.set(id, { state: 'failed', error: 'The server stopped' });
   }
 
@@ -66,7 +76,7 @@ export class Jobs {
   }
 
   private async drain(): Promise<void> {
-    while (this.queue.length > 0) {
+    while (this.queue.length > 0 && !this.stopped) {
       const id = this.queue.shift()!;
       this.current = id;
       this.views.set(id, { state: 'converting', seconds: 0, speed: 0 });
