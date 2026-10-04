@@ -32,12 +32,13 @@ export class Jobs {
   }
 
   async submit(id: string): Promise<void> {
-    if (this.active(id)) return;
+    if (this.busy(id)) return;
+    // Checked every time: a finished MP4 deleted from the folder is converted again.
     if (await this.deps.exists(this.filePath(id))) {
       this.views.set(id, { state: 'done' });
       return;
     }
-    if (this.active(id)) return; // queued by another request while we checked the folder
+    if (this.busy(id)) return; // queued by another request while we checked the folder
     this.views.set(id, { state: 'queued', position: 0 });
     this.queue.push(id);
     this.deps.log?.(`Queued ${id}`);
@@ -59,9 +60,9 @@ export class Jobs {
     return this.worker;
   }
 
-  private active(id: string): boolean {
+  private busy(id: string): boolean {
     const state = this.views.get(id)?.state;
-    return state !== undefined && state !== 'failed';
+    return state === 'queued' || state === 'converting';
   }
 
   private async drain(): Promise<void> {

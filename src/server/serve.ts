@@ -19,6 +19,7 @@ export interface ServeOptions {
 
 export interface ServeDeps {
   startup(): Promise<void>;
+  checkWritable(dir: string): Promise<void>;
   run: JobRunner;
   outputDir: string;
   exists(p: string): Promise<boolean>;
@@ -29,6 +30,7 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
   return {
     outputDir: appPaths(supportedPlatform(process.platform), homedir(), process.env).outputDir,
     exists: pathExists,
+    checkWritable: (dir) => convertDeps.checkWritable(dir),
     // Everything the first conversion needs, checked before listening: problems show at once.
     startup: async () => {
       const install = await convertDeps.locateInstall(options.fightcadeDir);
@@ -68,6 +70,8 @@ function shownHost(host: string): string {
 // signal, queued replays are dropped, and the server closes.
 export async function serve(options: ServeOptions, deps: ServeDeps = defaultServeDeps(options)): Promise<void> {
   await deps.startup();
+  // A folder fc2mp4 cannot write to (a root-owned Docker mount) shows now, not on the first job.
+  await deps.checkWritable(deps.outputDir);
   if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
 
   const jobs = new Jobs({ outputDir: deps.outputDir, exists: deps.exists, run: deps.run, log: options.log });

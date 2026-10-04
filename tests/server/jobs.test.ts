@@ -29,7 +29,7 @@ function harness(files: string[] = []) {
       return done.promise;
     },
   });
-  return { jobs, runs };
+  return { jobs, runs, disk };
 }
 
 describe('Jobs', () => {
@@ -97,6 +97,15 @@ describe('Jobs', () => {
     expect(jobs.view(B)).toEqual({ state: 'failed', error: 'The server stopped' });
     runs[0]!.done.reject(new ConvertError(ExitCode.Interrupted, 'Interrupted'));
     await jobs.idle();
+    expect(runs.map((r) => r.id)).toEqual([A]);
+  });
+
+  it('converts again when a finished MP4 was deleted from the folder', async () => {
+    const { jobs, runs, disk } = harness([`/videos/${A}.mp4`]);
+    await jobs.submit(A);
+    disk.delete(`/videos/${A}.mp4`);
+    await jobs.submit(A);
+    expect(jobs.view(A)).toMatchObject({ state: 'converting' });
     expect(runs.map((r) => r.id)).toEqual([A]);
   });
 

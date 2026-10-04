@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -65,6 +65,21 @@ describe('web page routes', () => {
     expect(await (await fetch(`${base}/api/jobs/${ID}`)).json()).toMatchObject({ state: 'converting' });
     expect((await fetch(`${base}/api/jobs/${ID}/file`)).status).toBe(404);
     finish();
+  });
+
+  it('answers 404, not an error, when a finished MP4 was deleted', async () => {
+    const { base, jobs, post } = await start(writesMp4);
+    await post(JSON.stringify({ url: ID }));
+    await jobs.idle();
+    await rm(jobs.filePath(ID));
+    expect((await fetch(`${base}/api/jobs/${ID}/file`)).status).toBe(404);
+  });
+
+  it('refuses requests that are not JSON, so other websites cannot queue conversions', async () => {
+    const { base } = await start(writesMp4);
+    const res = await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ url: ID }) });
+    expect(res.status).toBe(415);
+    expect((await fetch(`${base}/api/jobs/${ID}`)).status).toBe(404);
   });
 
   it('refuses an invalid link with the same message as the CLI', async () => {

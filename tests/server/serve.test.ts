@@ -11,6 +11,7 @@ function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] }
     outputDir: '/videos',
     exists: async () => false,
     startup: async () => {},
+    checkWritable: async () => {},
     run: async (id) => {
       runs.push(id);
     },
@@ -56,6 +57,19 @@ describe('serve', () => {
     expect(logs.some((l) => l.startsWith('Open'))).toBe(false);
   });
 
+  it('fails before listening when the output folder is not writable', async () => {
+    const logs: string[] = [];
+    const deps = fakeDeps({
+      checkWritable: async (dir) => {
+        throw new ConvertError(ExitCode.Preflight, `Cannot write to ${dir}`);
+      },
+    });
+    await expect(serve({ port: 0, host: '127.0.0.1', signal: new AbortController().signal, log: (m) => logs.push(m) }, deps)).rejects.toMatchObject({
+      message: 'Cannot write to /videos',
+    });
+    expect(logs.some((l) => l.startsWith('Open'))).toBe(false);
+  });
+
   it('reports a port already in use', async () => {
     const other = createServer();
     await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve));
@@ -85,7 +99,7 @@ describe('serve', () => {
     const running = serve({ port: 0, host: '127.0.0.1', signal: controller.signal, log: (m) => logs.push(m) }, deps);
     const base = (await started(logs)).replace('localhost', '127.0.0.1');
     for (const url of ['1700000000000-1111', '1700000000000-2222']) {
-      await fetch(`${base}/api/jobs`, { method: 'POST', body: JSON.stringify({ url }) });
+      await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
     }
     controller.abort();
     await running;

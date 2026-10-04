@@ -34,6 +34,9 @@ function readBody(req: IncomingMessage): Promise<string | null> {
 }
 
 async function createJob(jobs: Jobs, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // JSON only: a form or text/plain request from another website (no CORS preflight) cannot queue jobs.
+  const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+  if (type !== 'application/json') return json(res, 415, { error: 'Send JSON (Content-Type: application/json)' });
   const body = await readBody(req);
   if (body === null) return json(res, 413, { error: 'Request too large' });
   let url: unknown;
@@ -57,7 +60,12 @@ async function createJob(jobs: Jobs, req: IncomingMessage, res: ServerResponse):
 async function sendFile(jobs: Jobs, id: string, res: ServerResponse): Promise<void> {
   if (jobs.view(id)?.state !== 'done') return json(res, 404, { error: 'Not ready' });
   const file = jobs.filePath(id);
-  const { size } = await stat(file);
+  let size: number;
+  try {
+    ({ size } = await stat(file));
+  } catch {
+    return json(res, 404, { error: 'The MP4 is no longer in the folder; paste the link again' });
+  }
   res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': size, 'Content-Disposition': `attachment; filename="${id}.mp4"` });
   createReadStream(file)
     .on('error', () => res.destroy())
