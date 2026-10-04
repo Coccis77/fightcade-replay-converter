@@ -1,6 +1,6 @@
 {
   "name": "fc2mp4",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Convert Fightcade Street Fighter III: 3rd Strike replays to MP4",
   "type": "module",
   "bin": {
