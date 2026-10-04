@@ -25,6 +25,26 @@ fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234
 Videos go to `~/Movies/Fightcade` (macOS), `%USERPROFILE%\Videos\Fightcade` (Windows) or `~/Videos/Fightcade` (Linux); use `-o`
 for another file or folder. `--help` lists all options.
 
+## Docker
+
+A ready-to-use image is published with every release (x86-64; on Apple Silicon Macs use the native
+binary instead, Docker would emulate it slowly). Fightcade's files are not in the image: mount your
+own Fightcade folder (or its `emulator/fbneo` folder) read-only.
+
+```bash
+docker run --rm \
+  -v /path/to/Fightcade:/fightcade:ro \
+  -v "$PWD/videos":/videos \
+  ghcr.io/coccis77/fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/<id>
+```
+
+The MP4 lands in `./videos/<id>.mp4`. Every option works (`--scale`, `--max-duration`, `-o`, `-v`).
+The container runs as uid 1000: the `videos` folder must be writable by that user (on most single-user
+Linux machines, that is you). Pin a version with `ghcr.io/coccis77/fc2mp4:<version>`.
+
+Without Docker, `fc2mp4 prepare` does the same one-time setup (emulator download, Wine environment)
+ahead of the first conversion. `FC2MP4_OUTPUT_DIR` sets the default output folder.
+
 ## How it works
 
 fc2mp4 runs its own copy of Fightcade's emulator, built by GitHub Actions from the public source
