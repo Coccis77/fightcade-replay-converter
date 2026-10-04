@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { capture, emulatorCommand, killCommand, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { capture, emulatorCommand, emulatorSpawnOptions, killCommand, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
@@ -181,7 +181,7 @@ describe('emulator launch per platform', () => {
       command: '/Applications/FightCade2.app/Contents/Resources/wine.sh',
       args: ['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,sfiii3nr1,1-2.7,7100'],
     });
-    expect(killCommand(mac)).toEqual({ command: mac.launcher, args: ['taskkill', '/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
+    expect(killCommand(mac, null)).toEqual({ command: mac.launcher, args: ['taskkill', '/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
   });
   it('runs the exe directly on Windows, with spaces in the path', () => {
     const win = installLayout('C:\\Users\\Jean Pierre\\Documents\\Fightcade', 'win32');
@@ -190,6 +190,39 @@ describe('emulator launch per platform', () => {
       command: `${rt}\\fcadefbneo-fc2mp4.exe`,
       args: ['quark:stream,sfiii3nr1,1-2.7,7100'],
     });
-    expect(killCommand(win)).toEqual({ command: 'taskkill', args: ['/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
+    expect(killCommand(win, null)).toEqual({ command: 'taskkill', args: ['/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
+  });
+});
+
+describe('headless launch on Linux', () => {
+  const linux = installLayout('/srv/fightcade', 'linux');
+  const rt = '/home/a/.cache/fc2mp4/runtime';
+  const prefix = '/home/a/.cache/fc2mp4/wineprefix';
+
+  it('always runs under a virtual display with Wine’s virtual desktop', () => {
+    expect(emulatorCommand(linux, rt, '1-2')).toEqual({
+      command: 'xvfb-run',
+      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', 'explorer', '/desktop=fc2mp4,1024x768', `${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
+    });
+  });
+
+  it('stops every Wine process of our prefix only', () => {
+    expect(killCommand(linux, prefix)).toEqual({
+      command: 'wineserver',
+      args: ['-k'],
+      env: { WINEARCH: 'win32', WINEPREFIX: prefix, WINEDEBUG: '-all' },
+    });
+  });
+
+  it('starts in its own process group with our prefix, even if the user set WINEPREFIX', () => {
+    const opts = emulatorSpawnOptions(linux, rt, { FC2MP4_VIDEO: 'Z:\\x' }, prefix, { WINEPREFIX: '/home/a/.wine', PATH: '/usr/bin' });
+    expect(opts).toMatchObject({ cwd: rt, detached: true, stdio: 'ignore' });
+    expect(opts.env).toMatchObject({ WINEPREFIX: prefix, WINEARCH: 'win32', FC2MP4_VIDEO: 'Z:\\x', PATH: '/usr/bin' });
+  });
+
+  it('keeps macOS and Windows launches as they were', () => {
+    const mac = installLayout('/Applications/FightCade2.app', 'darwin');
+    expect(emulatorSpawnOptions(mac, '/rt', {}, null, {})).toMatchObject({ detached: false });
+    expect(killCommand(mac, null)).toEqual({ command: mac.launcher, args: ['taskkill', '/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
   });
 });

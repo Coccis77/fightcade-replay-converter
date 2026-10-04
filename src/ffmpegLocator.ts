@@ -27,6 +27,7 @@ export async function locateFfmpeg(platform: Platform, ffmpegDir: string, deps: 
   const onPath = await deps.which(platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   if (onPath) return onPath;
   if (platform === 'darwin') throw new ConvertError(ExitCode.Preflight, 'ffmpeg not found on PATH', 'brew install ffmpeg');
+  if (platform === 'linux') throw new ConvertError(ExitCode.Preflight, 'ffmpeg not found on PATH', 'sudo apt install ffmpeg');
 
   const target = pathFor(platform).join(ffmpegDir, FFMPEG_MIRROR.exe);
   if (await deps.exists(target)) return target;

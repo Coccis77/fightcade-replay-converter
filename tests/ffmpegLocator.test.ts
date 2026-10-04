@@ -56,6 +56,10 @@ describe('locateFfmpeg', () => {
     expect(calls.some((c) => c.startsWith('rename'))).toBe(false);
     expect(calls).toContain(`rm:${DIR}\\ffmpeg.exe.download`);
   });
+  it('asks Linux users to install ffmpeg with apt', async () => {
+    const { deps } = fakeDeps({});
+    await expect(locateFfmpeg('linux', '/x', deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, hint: 'sudo apt install ffmpeg' });
+  });
   it('asks macOS users to install ffmpeg with Homebrew', async () => {
     const { deps } = fakeDeps({});
     await expect(locateFfmpeg('darwin', '/x', deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, hint: 'brew install ffmpeg' });

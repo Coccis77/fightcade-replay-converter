@@ -83,7 +83,7 @@ export function defaultDeps(): ConvertDeps {
       await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, run, onSetup });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
-    capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg), opts),
+    capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg, install.platform === 'linux' ? app.wineprefixDir : null), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
     },

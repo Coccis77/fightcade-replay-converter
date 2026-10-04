@@ -10,6 +10,7 @@ import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleM
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
 import { streamArg } from './replayRef.js';
+import { wineEnv } from './winePrefix.js';
 import { fifoTransport, pipeName, pipeTransport, winPath, type VideoTransport } from './transport.js';
 
 export { winPath } from './transport.js';
@@ -47,13 +48,37 @@ export interface CaptureResult {
 
 export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, quarkId: string): { command: string; args: string[] } {
   const exe = pathFor(install.platform).join(runtimeDir, EMULATOR_EXE);
+  if (install.platform === 'linux') {
+    // Always headless: a virtual display plus Wine's virtual desktop (bare Xvfb fails: X_UnmapWindow BadWindow).
+    return {
+      command: 'xvfb-run',
+      args: ['-a', '-s', '-screen 0 1024x768x24', 'wine', 'explorer', '/desktop=fc2mp4,1024x768', exe, streamArg(quarkId)],
+    };
+  }
   if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(quarkId)] };
   return { command: exe, args: [streamArg(quarkId)] };
 }
 
-export function killCommand(install: FightcadeInstall): { command: string; args: string[] } {
+export function killCommand(install: FightcadeInstall, winePrefix: string | null): { command: string; args: string[]; env?: Record<string, string> } {
+  if (install.platform === 'linux' && winePrefix !== null) return { command: 'wineserver', args: ['-k'], env: wineEnv(winePrefix) };
   const args = ['/IM', EMULATOR_EXE, '/F'];
   return install.launcher !== null ? { command: install.launcher, args: ['taskkill', ...args] } : { command: 'taskkill', args };
+}
+
+export function emulatorSpawnOptions(
+  install: FightcadeInstall,
+  runtimeDir: string,
+  env: Record<string, string>,
+  winePrefix: string | null,
+  base: NodeJS.ProcessEnv = process.env,
+): { cwd: string; env: NodeJS.ProcessEnv; detached: boolean; stdio: 'ignore' } {
+  const linux = install.platform === 'linux' && winePrefix !== null;
+  return {
+    cwd: runtimeDir,
+    env: { ...base, ...(linux ? wineEnv(winePrefix) : {}), ...env },
+    detached: linux, // own process group, so Xvfb and Wine are stopped together
+    stdio: 'ignore',
+  };
 }
 
 export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<CaptureResult> {
@@ -156,7 +181,13 @@ function wrap(child: ReturnType<typeof spawn>, kill: () => Promise<void>): Captu
   };
 }
 
-export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string, quarkId: string, ffmpeg: string): CaptureDeps {
+export function defaultCaptureDeps(
+  install: FightcadeInstall,
+  runtimeDir: string,
+  quarkId: string,
+  ffmpeg: string,
+  winePrefix: string | null,
+): CaptureDeps {
   return {
     openTransport: (dir) =>
       install.platform === 'win32'
@@ -186,11 +217,19 @@ export function defaultCaptureDeps(install: FightcadeInstall, runtimeDir: string
       const awake = install.platform === 'darwin' ? spawn('caffeinate', ['-d', '-u', '-w', String(process.pid)], { stdio: 'ignore' }) : null;
       awake?.on('error', () => {});
       const { command, args } = emulatorCommand(install, runtimeDir, quarkId);
-      const child = spawn(command, args, { cwd: runtimeDir, env: { ...process.env, ...env }, stdio: 'ignore' });
+      const options = emulatorSpawnOptions(install, runtimeDir, env, winePrefix);
+      const child = spawn(command, args, options);
       child.on('exit', () => awake?.kill());
       return wrap(child, async () => {
-        const kill = killCommand(install);
-        await run(kill.command, kill.args, { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs }).catch(() => {});
+        const kill = killCommand(install, winePrefix);
+        await run(kill.command, kill.args, { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs, env: kill.env ? { ...process.env, ...kill.env } : undefined }).catch(() => {});
+        if (options.detached && child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, 'SIGTERM');
+          } catch {
+            // already gone
+          }
+        }
         child.kill('SIGKILL');
       });
     },
