@@ -2,6 +2,7 @@
 import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
+import { installSignalHandlers } from './signals.js';
 
 declare const __FC2MP4_VERSION__: string | undefined;
 
@@ -25,14 +26,7 @@ function progressLine(e: ProgressEvent): string {
 
 async function main(): Promise<number> {
   const controller = new AbortController();
-  let interrupts = 0;
-  process.on('SIGINT', () => {
-    interrupts += 1;
-    if (interrupts > 1) process.exit(ExitCode.Interrupted);
-    process.stderr.write('\nStopping (Ctrl-C again to force quit)…\n');
-    controller.abort();
-  });
-  process.on('SIGTERM', () => controller.abort());
+  installSignalHandlers(process, controller, (msg) => process.stderr.write(msg), (code) => process.exit(code));
 
   const tty = process.stderr.isTTY;
   const log = (msg: string) => process.stderr.write(`${tty ? '\n' : ''}${msg}\n`);
