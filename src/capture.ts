@@ -79,6 +79,16 @@ export function emulatorSpawnOptions(
   };
 }
 
+// Stop whatever is left in a process group once its leader is gone. If xvfb-run itself is killed,
+// its Xvfb would otherwise keep running, orphaned.
+export function sweepProcessGroup(pid: number): void {
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    // group already empty
+  }
+}
+
 export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<CaptureResult> {
   const video = join(opts.dir, 'video.mp4');
   const audio = join(opts.dir, 'audio.raw');
@@ -217,17 +227,14 @@ export function defaultCaptureDeps(
       const { command, args } = emulatorCommand(install, runtimeDir, quarkId);
       const options = emulatorSpawnOptions(install, runtimeDir, env, winePrefix);
       const child = spawn(command, args, options);
-      child.on('exit', () => awake?.kill());
+      child.on('exit', () => {
+        awake?.kill();
+        if (options.detached && child.pid !== undefined) sweepProcessGroup(child.pid);
+      });
       return wrap(child, async () => {
         const kill = killCommand(install, winePrefix);
         await run(kill.command, kill.args, { cwd: runtimeDir, timeoutMs: TIMEOUTS.killMs, env: kill.env ? { ...process.env, ...kill.env } : undefined }).catch(() => {});
-        if (options.detached && child.pid !== undefined) {
-          try {
-            process.kill(-child.pid, 'SIGTERM');
-          } catch {
-            // already gone
-          }
-        }
+        if (options.detached && child.pid !== undefined) sweepProcessGroup(child.pid);
         child.kill('SIGKILL');
       });
     },

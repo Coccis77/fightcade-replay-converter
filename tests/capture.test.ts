@@ -1,6 +1,7 @@
+import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { capture, emulatorCommand, emulatorSpawnOptions, killCommand, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { capture, emulatorCommand, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
@@ -225,5 +226,24 @@ describe('headless launch on Linux', () => {
     const mac = installLayout('/Applications/FightCade2.app', 'darwin');
     expect(emulatorSpawnOptions(mac, '/rt', {}, null, {})).toMatchObject({ detached: false });
     expect(killCommand(mac, null)).toEqual({ command: mac.launcher, args: ['taskkill', '/IM', 'fcadefbneo-fc2mp4.exe', '/F'] });
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('sweepProcessGroup', () => {
+  it('stops what the emulator process group left behind (e.g. Xvfb after xvfb-run was killed)', async () => {
+    const child = spawn('sh', ['-c', 'sleep 30 & echo $!'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout!.on('data', (d) => (out += d));
+    await new Promise((done) => child.on('exit', done));
+    const orphan = Number(out.trim());
+    expect(() => process.kill(orphan, 0)).not.toThrow(); // still running after its parent exited
+
+    sweepProcessGroup(child.pid!);
+    await new Promise((done) => setTimeout(done, 200));
+    expect(() => process.kill(orphan, 0)).toThrow();
+  });
+
+  it('does nothing when the group is already gone', () => {
+    expect(() => sweepProcessGroup(2 ** 22 - 3)).not.toThrow();
   });
 });
