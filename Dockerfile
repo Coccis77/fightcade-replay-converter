@@ -7,7 +7,7 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 \
  && apt-get update \
- && apt-get install -y wine wine32:i386 xvfb xauth pulseaudio ffmpeg ca-certificates tini \
+ && apt-get install -y wine wine32:i386 ffmpeg ca-certificates tini \
  && rm -rf /var/lib/apt/lists/*
 # ubuntu:24.04 ships a user "ubuntu" with uid 1000; fc2mp4 takes that uid so the MP4s belong to the
 # usual first user of a Linux host.

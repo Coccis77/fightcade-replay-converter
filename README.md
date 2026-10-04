@@ -11,10 +11,10 @@ faster than real time. Windows, macOS and Linux. Free and non-commercial.
 - **macOS:** download `fc2mp4-macos-arm64`, `chmod +x` it, and install ffmpeg (`brew install ffmpeg`).
   Needs Fightcade 2 with 3rd Strike opened once.
 - **Linux (x86_64, headless):** download `fc2mp4-linux-x64`, `chmod +x` it, and install the system
-  packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb pulseaudio ffmpeg`.
+  packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg`.
   Point it at Fightcade's files with `--fightcade-dir` (or `FC2MP4_FIGHTCADE_DIR`): either a Fightcade
   folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and `ROMs/sfiii3nr1.zip` +
-  `ROMs/sfiii3.zip`. No screen is needed: it runs on a virtual display.
+  `ROMs/sfiii3.zip`. No screen or sound device is needed.
 
 ## Usage
 
@@ -50,7 +50,8 @@ ahead of the first conversion. `FC2MP4_OUTPUT_DIR` sets the default output folde
 
 fc2mp4 runs its own copy of Fightcade's emulator, built by GitHub Actions from the public source
 (github.com/fightcadeorg/fightcade-fbneo) with small patches (`emulator/patches.py`) that stream
-every frame to ffmpeg and fast-forward through the replay. That copy and, on Windows, ffmpeg are
+every frame to ffmpeg and fast-forward through the replay. While recording, the emulator shows no
+window and plays no sound. That copy and, on Windows, ffmpeg are
 downloaded automatically on first use (the emulator is checked for updates once a day;
 `fc2mp4 update-emulator` checks now). It runs from its own folder (`%LOCALAPPDATA%\fc2mp4` or
 `~/Library/Caches/fc2mp4`) using Fightcade's network library and ROM: **your Fightcade install is
