@@ -12,6 +12,8 @@ function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] }
     exists: async () => false,
     startup: async () => {},
     checkWritable: async () => {},
+    cleanup: { list: async () => [], mtimeMs: async () => 0, remove: async () => {}, now: () => 0 },
+    schedule: () => () => {},
     run: async (id) => {
       runs.push(id);
     },
@@ -104,5 +106,60 @@ describe('serve', () => {
     controller.abort();
     await running;
     expect(runs).toEqual(['1700000000000-1111']);
+  });
+
+  it('cleans the output folder at startup and every hour when --keep is set', async () => {
+    const DAY = 24 * 60 * 60_000;
+    const NOW = Date.parse('2026-10-10T12:00:00Z');
+    const files: Record<string, number> = { '1700000000000-1111.mp4': NOW - 8 * DAY };
+    const removed: string[] = [];
+    let tick: (() => void) | undefined;
+    let every = 0;
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      cleanup: {
+        list: async () => Object.keys(files),
+        mtimeMs: async (p) => files[p.split('/').at(-1)!]!,
+        remove: async (p) => {
+          removed.push(p.split('/').at(-1)!);
+          delete files[p.split('/').at(-1)!];
+        },
+        now: () => NOW,
+      },
+      schedule: (fn, ms) => {
+        tick = fn;
+        every = ms;
+        return () => (tick = undefined);
+      },
+    });
+    const running = serve({ port: 0, host: '127.0.0.1', keepMs: 7 * DAY, signal: controller.signal, log: (m) => logs.push(m) }, deps);
+    await started(logs);
+    await expect.poll(() => removed).toEqual(['1700000000000-1111.mp4']);
+    expect(logs).toContain('Deleted 1700000000000-1111.mp4 (8 days old)');
+    expect(every).toBe(60 * 60_000);
+    files['1700000000000-2222.mp4'] = NOW - 9 * DAY;
+    tick!();
+    await expect.poll(() => removed).toEqual(['1700000000000-1111.mp4', '1700000000000-2222.mp4']);
+    controller.abort();
+    await running;
+    expect(tick).toBeUndefined();
+  });
+
+  it('never deletes anything without --keep', async () => {
+    const listed: string[] = [];
+    let scheduled = false;
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      cleanup: { list: async (d) => (listed.push(d), []), mtimeMs: async () => 0, remove: async () => {}, now: () => 0 },
+      schedule: () => ((scheduled = true), () => {}),
+    });
+    const running = serve({ port: 0, host: '127.0.0.1', signal: controller.signal, log: (m) => logs.push(m) }, deps);
+    await started(logs);
+    controller.abort();
+    await running;
+    expect(listed).toEqual([]);
+    expect(scheduled).toBe(false);
   });
 });

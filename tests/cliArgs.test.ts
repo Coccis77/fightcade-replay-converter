@@ -19,6 +19,7 @@ describe('parseDuration', () => {
     ['1h', 3_600_000],
     ['30', 1_800_000],
     ['1.5h', 5_400_000],
+    ['2d', 172_800_000],
   ])('%s → %d ms', (text, ms) => {
     expect(parseDuration(text)).toBe(ms);
   });
@@ -59,16 +60,18 @@ describe('parseCli', () => {
     expect(parseCli(['prepare', '-v'])).toEqual({ command: 'prepare', verbose: true });
   });
   it('parses serve, with FC2MP4_HOST as the default host', () => {
-    expect(parseCli(['serve'], {})).toEqual({ command: 'serve', port: 8080, host: '127.0.0.1', fightcadeDir: undefined, verbose: false });
+    expect(parseCli(['serve'], {})).toEqual({ command: 'serve', port: 8080, host: '127.0.0.1', fightcadeDir: undefined, keepMs: undefined, verbose: false });
     expect(parseCli(['serve', '--port', '9000', '--host', '0.0.0.0', '--fightcade-dir', '/F', '-v'], {})).toEqual({
-      command: 'serve', port: 9000, host: '0.0.0.0', fightcadeDir: '/F', verbose: true,
+      command: 'serve', port: 9000, host: '0.0.0.0', fightcadeDir: '/F', keepMs: undefined, verbose: true,
     });
     expect(parseCli(['serve'], { FC2MP4_HOST: '0.0.0.0' })).toMatchObject({ host: '0.0.0.0' });
+    expect(parseCli(['serve', '--keep', '7d'], {})).toMatchObject({ keepMs: 7 * 24 * 60 * 60_000 });
+    expect(parseCli(['serve', '--keep', '12h'], {})).toMatchObject({ keepMs: 12 * 60 * 60_000 });
   });
   it('returns help', () => {
     expect(parseCli(['--help'])).toEqual({ command: 'help' });
   });
-  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']], [['serve', 'x']], [['serve', '--port', '0']], [['serve', '--port', 'abc']]])('rejects %j', (argv) => {
+  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']], [['serve', 'x']], [['serve', '--port', '0']], [['serve', '--port', 'abc']], [['serve', '--keep', '7']], [['serve', '--keep', '0d']], [['serve', '--keep', 'abc']], [['--keep', '7d', '1-2']]])('rejects %j', (argv) => {
     expect(usageError(argv)).toMatchObject({ exitCode: ExitCode.Usage });
   });
 });

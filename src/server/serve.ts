@@ -6,6 +6,7 @@ import { convert, defaultDeps, prepare } from '../convert.js';
 import { ConvertError, ExitCode } from '../errors.js';
 import { pathExists } from '../fsUtil.js';
 import { appPaths, supportedPlatform } from '../platform.js';
+import { cleanOutputFolder, defaultCleanupDeps, type CleanupDeps } from './cleanup.js';
 import { createHandler } from './http.js';
 import { Jobs, type JobRunner } from './jobs.js';
 
@@ -13,6 +14,8 @@ export interface ServeOptions {
   port: number;
   host: string;
   fightcadeDir?: string;
+  // Delete fc2mp4's MP4s older than this from the output folder (off when undefined).
+  keepMs?: number;
   signal: AbortSignal;
   log: (msg: string) => void;
 }
@@ -23,6 +26,8 @@ export interface ServeDeps {
   run: JobRunner;
   outputDir: string;
   exists(p: string): Promise<boolean>;
+  cleanup: CleanupDeps;
+  schedule(fn: () => void, ms: number): () => void;
 }
 
 export function defaultServeDeps(options: ServeOptions): ServeDeps {
@@ -31,6 +36,12 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
     outputDir: appPaths(supportedPlatform(process.platform), homedir(), process.env).outputDir,
     exists: pathExists,
     checkWritable: (dir) => convertDeps.checkWritable(dir),
+    cleanup: defaultCleanupDeps(),
+    schedule: (fn, ms) => {
+      const timer = setInterval(fn, ms);
+      timer.unref();
+      return () => clearInterval(timer);
+    },
     // Everything the first conversion needs, checked before listening: problems show at once.
     startup: async () => {
       const install = await convertDeps.locateInstall(options.fightcadeDir);
@@ -62,6 +73,14 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
   };
 }
 
+const HOUR_MS = 60 * 60_000;
+const DAY_MS = 24 * HOUR_MS;
+
+function shownAge(ms: number): string {
+  if (ms >= DAY_MS) return `${Math.floor(ms / DAY_MS)} days old`;
+  return `${Math.floor(ms / HOUR_MS)} hours old`;
+}
+
 function shownHost(host: string): string {
   return host === '0.0.0.0' || host === '127.0.0.1' || host === '::' ? 'localhost' : host;
 }
@@ -88,8 +107,21 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
   });
   options.log(`Open http://${shownHost(options.host)}:${(server.address() as AddressInfo).port}`);
 
+  let cancelCleanup = () => {};
+  if (options.keepMs !== undefined) {
+    const keepMs = options.keepMs;
+    const sweep = async () => {
+      for (const file of await cleanOutputFolder(deps.outputDir, keepMs, (id) => jobs.isBusy(id), deps.cleanup)) {
+        options.log(`Deleted ${file.name} (${shownAge(file.ageMs)})`);
+      }
+    };
+    void sweep();
+    cancelCleanup = deps.schedule(() => void sweep(), HOUR_MS);
+  }
+
   await new Promise<void>((resolve) => {
     const stop = () => {
+      cancelCleanup();
       jobs.stop();
       server.close(() => resolve());
       server.closeAllConnections();

@@ -58,7 +58,12 @@ docker run --rm -p 8080:8080 \
   ghcr.io/coccis77/fc2mp4 serve
 ```
 
-The MP4s are also kept in the output folder.
+The MP4s are also kept in the output folder. Add `--keep 7d` (or `12h`, …) to delete fc2mp4's MP4s
+older than that, checked at startup and every hour; other files in the folder are never touched, and a
+deleted replay is simply converted again if someone asks for it.
+
+On Windows with Docker in WSL, if `http://localhost:8080` does not load, use the WSL address shown by
+`hostname -I` in Ubuntu (e.g. `http://172.25.192.17:8080`).
 
 ## How it works
 

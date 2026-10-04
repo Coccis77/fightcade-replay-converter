@@ -43,7 +43,7 @@ async function main(): Promise<number> {
     }
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
     if (request.command === 'serve') {
-      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
+      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, keepMs: request.keepMs, signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
       return controller.signal.aborted ? ExitCode.Interrupted : 0;
     }
     if (request.command === 'prepare') {
