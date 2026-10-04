@@ -7,6 +7,7 @@ import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulato
 import { currentPatchSetHash } from './patchSet.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
 import { ConvertError, ExitCode } from './errors.js';
+import { which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
@@ -62,7 +63,7 @@ export function defaultDeps(): ConvertDeps {
     locateInstall: (override) => locateInstall({ platform: process.platform, home, env: process.env, override, exists: pathExists }),
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
-    preflight: (install) => preflight(install, { exists: pathExists }),
+    preflight: (install) => preflight(install, { exists: pathExists, which: (cmd) => which(cmd, platform) }),
     locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),
     ensureEmulator: async (install, opts) => {
       const dir = emulatorDir();

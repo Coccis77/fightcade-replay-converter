@@ -57,8 +57,8 @@ describe('locateInstall', () => {
       hint: expect.stringContaining('D:\\nope'),
     });
   });
-  it('rejects Linux for now', async () => {
-    await expect(locateInstall({ platform: 'linux', home: '/home/a', env: {}, exists: async () => true })).rejects.toMatchObject({ exitCode: ExitCode.Preflight });
+  it('rejects unsupported platforms', async () => {
+    await expect(locateInstall({ platform: 'freebsd', home: '/home/a', env: {}, exists: async () => true })).rejects.toMatchObject({ exitCode: ExitCode.Preflight });
   });
 });
 
@@ -66,9 +66,47 @@ describe('preflight', () => {
   it('needs the ROM, and wine.sh only on macOS', async () => {
     const mac = installLayout(MAC_ROOT, 'darwin');
     const win = installLayout(WIN_ROOT, 'win32');
-    await expect(preflight(mac, { exists: async () => true })).resolves.toBeUndefined();
-    await expect(preflight(win, { exists: async (p) => !p.endsWith('wine.sh') })).resolves.toBeUndefined();
-    await expect(preflight(mac, { exists: async (p) => !p.endsWith('wine.sh') })).rejects.toMatchObject({ message: expect.stringMatching(/wine\.sh/) });
-    await expect(preflight(win, { exists: async (p) => !p.endsWith('sfiii3nr1.zip') })).rejects.toMatchObject({ message: expect.stringMatching(/ROM not found/) });
+    await expect(preflight(mac, { exists: async () => true, which: async () => '/usr/bin/x' })).resolves.toBeUndefined();
+    await expect(preflight(win, { exists: async (p) => !p.endsWith('wine.sh'), which: async () => '/usr/bin/x' })).resolves.toBeUndefined();
+    await expect(preflight(mac, { exists: async (p) => !p.endsWith('wine.sh'), which: async () => '/usr/bin/x' })).rejects.toMatchObject({ message: expect.stringMatching(/wine\.sh/) });
+    await expect(preflight(win, { exists: async (p) => !p.endsWith('sfiii3nr1.zip'), which: async () => '/usr/bin/x' })).rejects.toMatchObject({ message: expect.stringMatching(/ROM not found/) });
+  });
+});
+
+describe('Linux Fightcade files', () => {
+  const home = '/home/a';
+  const which = async (cmd: string) => `/usr/bin/${cmd}`;
+
+  it('accepts a Fightcade root (official install or a copy)', async () => {
+    const root = '/srv/fightcade';
+    const i = await locateInstall({ platform: 'linux', home, env: {}, override: root, exists: async (p) => p === `${root}/emulator/fbneo/ggponet.dll` });
+    expect(i).toMatchObject({ platform: 'linux', root, fbneoDir: `${root}/emulator/fbneo`, launcher: null, rom: `${root}/emulator/fbneo/ROMs/sfiii3nr1.zip` });
+  });
+  it('accepts the fbneo folder itself (files-only server folder)', async () => {
+    const dir = '/srv/fbneo-files';
+    const i = await locateInstall({ platform: 'linux', home, env: {}, override: dir, exists: async (p) => p === `${dir}/ggponet.dll` });
+    expect(i).toMatchObject({ fbneoDir: dir, ggponet: `${dir}/ggponet.dll`, romsDir: `${dir}/ROMs` });
+  });
+  it('reads FC2MP4_FIGHTCADE_DIR, then the usual install places', async () => {
+    const env = { FC2MP4_FIGHTCADE_DIR: '/mnt/c/Users/Coccis/Documents/Fightcade' };
+    const i = await locateInstall({ platform: 'linux', home, env, exists: async (p) => p.startsWith(env.FC2MP4_FIGHTCADE_DIR) && p.endsWith('/emulator/fbneo/ggponet.dll') });
+    expect(i.root).toBe(env.FC2MP4_FIGHTCADE_DIR);
+    const fallback = await locateInstall({ platform: 'linux', home, env: {}, exists: async (p) => p === '/opt/fightcade/emulator/fbneo/ggponet.dll' });
+    expect(fallback.root).toBe('/opt/fightcade');
+  });
+  it('explains both accepted layouts when the folder is wrong', async () => {
+    await expect(locateInstall({ platform: 'linux', home, env: {}, override: '/srv/fightcade/ROMs', exists: async () => false })).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      hint: expect.stringMatching(/emulator\/fbneo\/ggponet\.dll.*ggponet\.dll/),
+    });
+  });
+  it('needs wine and xvfb-run on Linux, with the apt hint', async () => {
+    const i = installLayout('/srv/fightcade', 'linux');
+    await expect(preflight(i, { exists: async () => true, which })).resolves.toBeUndefined();
+    await expect(preflight(i, { exists: async () => true, which: async (c) => (c === 'xvfb-run' ? null : `/usr/bin/${c}`) })).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      message: expect.stringContaining('xvfb-run'),
+      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb ffmpeg',
+    });
   });
 });

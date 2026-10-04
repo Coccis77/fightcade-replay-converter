@@ -12,10 +12,10 @@ function thrown(fn: () => unknown): unknown {
 }
 
 describe('platform', () => {
-  it('accepts macOS and Windows only', () => {
+  it('accepts macOS and Windows', () => {
     expect(supportedPlatform('darwin')).toBe('darwin');
     expect(supportedPlatform('win32')).toBe('win32');
-    expect(thrown(() => supportedPlatform('linux'))).toMatchObject({ exitCode: ExitCode.Preflight });
+    expect(thrown(() => supportedPlatform('aix'))).toMatchObject({ exitCode: ExitCode.Preflight });
   });
 
   it('places macOS files under Library/Caches and Movies', () => {
@@ -24,6 +24,7 @@ describe('platform', () => {
       runtimeDir: '/Users/fran/Library/Caches/fc2mp4/runtime',
       sourceDir: '/Users/fran/Library/Caches/fc2mp4/fightcade-fbneo',
       ffmpegDir: '/Users/fran/Library/Caches/fc2mp4/ffmpeg',
+      wineprefixDir: '/Users/fran/Library/Caches/fc2mp4/wineprefix',
       outputDir: '/Users/fran/Movies/Fightcade',
     });
   });
@@ -35,7 +36,26 @@ describe('platform', () => {
       runtimeDir: 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\runtime',
       sourceDir: 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\fightcade-fbneo',
       ffmpegDir: 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\ffmpeg',
+      wineprefixDir: 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\wineprefix',
       outputDir: 'C:\\Users\\Jean Pierre\\Videos\\Fightcade',
     });
+  });
+});
+
+describe('platform (Linux)', () => {
+  it('accepts Linux', () => {
+    expect(supportedPlatform('linux')).toBe('linux');
+    expect(thrown(() => supportedPlatform('freebsd'))).toMatchObject({ exitCode: ExitCode.Preflight, message: expect.stringContaining('Linux') });
+  });
+  it('uses XDG_CACHE_HOME when set, ~/.cache otherwise, and ~/Videos', () => {
+    expect(appPaths('linux', '/home/a', { XDG_CACHE_HOME: '/data/cache' })).toEqual({
+      cacheDir: '/data/cache/fc2mp4',
+      runtimeDir: '/data/cache/fc2mp4/runtime',
+      sourceDir: '/data/cache/fc2mp4/fightcade-fbneo',
+      ffmpegDir: '/data/cache/fc2mp4/ffmpeg',
+      wineprefixDir: '/data/cache/fc2mp4/wineprefix',
+      outputDir: '/home/a/Videos/Fightcade',
+    });
+    expect(appPaths('linux', '/home/a', {}).cacheDir).toBe('/home/a/.cache/fc2mp4');
   });
 });
