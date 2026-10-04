@@ -7,6 +7,7 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 prepare [-v]
+       fc2mp4 serve [--port <n>] [--host <addr>] [--fightcade-dir <p>] [-v]
 
 Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
 
@@ -21,13 +22,15 @@ Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows
 
 update-emulator checks GitHub for a newer emulator build now (otherwise once a day).
 rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).
-prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).`;
+prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).
+serve starts a small web page to convert replays from a browser (default http://localhost:8080; --host 0.0.0.0 or FC2MP4_HOST lets other devices in).`;
 
 export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
   | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
-  | { command: 'prepare'; verbose: boolean };
+  | { command: 'prepare'; verbose: boolean }
+  | { command: 'serve'; port: number; host: string; fightcadeDir?: string; verbose: boolean };
 
 export function formatReplayLength(frames: number): string {
   const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
@@ -47,7 +50,7 @@ function usage(message: string): ConvertError {
   return new ConvertError(ExitCode.Usage, message, 'Run fc2mp4 --help');
 }
 
-export function parseCli(argv: string[]): CliRequest {
+export function parseCli(argv: string[], env: Record<string, string | undefined> = process.env): CliRequest {
   let parsed;
   try {
     parsed = parseArgs({
@@ -59,6 +62,8 @@ export function parseCli(argv: string[]): CliRequest {
         scale: { type: 'string' },
         'max-duration': { type: 'string' },
         'fightcade-dir': { type: 'string' },
+        port: { type: 'string' },
+        host: { type: 'string' },
         verbose: { type: 'boolean', short: 'v' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -74,6 +79,12 @@ export function parseCli(argv: string[]): CliRequest {
   if (command === 'prepare') {
     if (positionals.length !== 1) throw usage('prepare takes no arguments');
     return { command, verbose };
+  }
+  if (command === 'serve') {
+    if (positionals.length !== 1) throw usage('serve takes no arguments');
+    const port = values.port === undefined ? 8080 : Number(values.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw usage(`Invalid --port "${values.port}"`);
+    return { command, port, host: values.host ?? env.FC2MP4_HOST ?? '127.0.0.1', fightcadeDir: values['fightcade-dir'], verbose };
   }
   if (command === 'update-emulator' || command === 'rebuild-emulator') {
     if (positionals.length !== 1) throw usage(`${command} takes no arguments`);

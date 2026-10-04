@@ -46,6 +46,20 @@ Linux machines, that is you). Pin a version with `ghcr.io/coccis77/fc2mp4:<versi
 Without Docker, `fc2mp4 prepare` does the same one-time setup (emulator download, Wine environment)
 ahead of the first conversion. `FC2MP4_OUTPUT_DIR` sets the default output folder.
 
+## Web page
+
+`fc2mp4 serve` starts a small page: paste a replay link, the MP4 downloads when it is ready. One
+replay is converted at a time; the others wait in line. Open `http://localhost:8080`
+(`--port` to change it; `--host 0.0.0.0` lets other devices on your network in).
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v /path/to/Fightcade:/fightcade:ro -v "$PWD/videos":/videos \
+  ghcr.io/coccis77/fc2mp4 serve
+```
+
+The MP4s are also kept in the output folder.
+
 ## How it works
 
 fc2mp4 runs its own copy of Fightcade's emulator, built by GitHub Actions from the public source

@@ -58,10 +58,17 @@ describe('parseCli', () => {
     expect(parseCli(['prepare'])).toEqual({ command: 'prepare', verbose: false });
     expect(parseCli(['prepare', '-v'])).toEqual({ command: 'prepare', verbose: true });
   });
+  it('parses serve, with FC2MP4_HOST as the default host', () => {
+    expect(parseCli(['serve'], {})).toEqual({ command: 'serve', port: 8080, host: '127.0.0.1', fightcadeDir: undefined, verbose: false });
+    expect(parseCli(['serve', '--port', '9000', '--host', '0.0.0.0', '--fightcade-dir', '/F', '-v'], {})).toEqual({
+      command: 'serve', port: 9000, host: '0.0.0.0', fightcadeDir: '/F', verbose: true,
+    });
+    expect(parseCli(['serve'], { FC2MP4_HOST: '0.0.0.0' })).toMatchObject({ host: '0.0.0.0' });
+  });
   it('returns help', () => {
     expect(parseCli(['--help'])).toEqual({ command: 'help' });
   });
-  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']]])('rejects %j', (argv) => {
+  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']], [['serve', 'x']], [['serve', '--port', '0']], [['serve', '--port', 'abc']]])('rejects %j', (argv) => {
     expect(usageError(argv)).toMatchObject({ exitCode: ExitCode.Usage });
   });
 });

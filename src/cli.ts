@@ -2,6 +2,7 @@
 import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
+import { serve } from './server/serve.js';
 import { installSignalHandlers } from './signals.js';
 
 declare const __FC2MP4_VERSION__: string | undefined;
@@ -41,6 +42,10 @@ async function main(): Promise<number> {
       return 0;
     }
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
+    if (request.command === 'serve') {
+      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
+      return controller.signal.aborted ? ExitCode.Interrupted : 0;
+    }
     if (request.command === 'prepare') {
       const result = await prepare({ signal: controller.signal, log, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
       process.stdout.write(result.emulatorUpdated ? 'Ready (emulator downloaded).\n' : 'Ready.\n');
