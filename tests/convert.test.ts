@@ -260,3 +260,25 @@ describe('notWritableHint', () => {
     expect(notWritableHint(true, true)).toBe('Make it writable, or set FC2MP4_OUTPUT_DIR to another folder (in Docker: the folder mounted at /videos must be writable by uid 1000)');
   });
 });
+
+describe('prepare details', () => {
+  it('reports Interrupted when stopped during the emulator download (not a warning)', async () => {
+    const controller = new AbortController();
+    const { deps, calls } = harness({
+      ensureEmulator: async () => {
+        controller.abort();
+        return { updated: false, warning: 'Could not check for emulator updates (aborted); using the installed build' };
+      },
+    });
+    await expect(prepare({ signal: controller.signal }, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
+    expect(calls).not.toContain('wine');
+    expect(calls.at(-1)).toBe('unlock');
+  });
+
+  it('tells what it did with -v', async () => {
+    const { deps } = harness();
+    const debugs: string[] = [];
+    await prepare({ debug: (m) => debugs.push(m) }, deps);
+    expect(debugs).toEqual(['ffmpeg: /usr/bin/ffmpeg', 'Emulator: up to date', 'Wine: ready']);
+  });
+});

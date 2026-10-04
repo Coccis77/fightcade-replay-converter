@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { formatReplayLength, parseCli, USAGE } from './cliArgs.js';
+import { formatReplayLength, parseCli, prepareMessage, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { serve } from './server/serve.js';
@@ -47,8 +47,10 @@ async function main(): Promise<number> {
       return controller.signal.aborted ? ExitCode.Interrupted : 0;
     }
     if (request.command === 'prepare') {
-      const result = await prepare({ signal: controller.signal, log, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
-      process.stdout.write(result.emulatorUpdated ? 'Ready (emulator downloaded).\n' : 'Ready.\n');
+      const debugPrepare = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
+      const result = await prepare({ signal: controller.signal, log, debug: debugPrepare, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
+      const message = prepareMessage(result);
+      if (message) process.stdout.write(`${message}\n`);
       return result.warning ? ExitCode.Emulator : 0;
     }
     if (request.command !== 'convert') {

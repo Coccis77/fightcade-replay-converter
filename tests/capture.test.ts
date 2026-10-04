@@ -150,6 +150,16 @@ describe('capture', () => {
     expect(log).not.toContain('kill:encoder');
   });
 
+  it('reports a replay that had not started when --max-duration was reached', async () => {
+    const { deps, log } = harness({});
+    await expect(capture(deps, { ...base, maxDurationMs: 5_000 })).rejects.toMatchObject({
+      exitCode: ExitCode.Recording,
+      message: 'The replay had not started when --max-duration was reached',
+      hint: 'Use a longer --max-duration',
+    });
+    expect(log).toContain('kill:emulator');
+  });
+
   it('rejects a wrong frame format', async () => {
     const { deps } = harness({ infoAt: 1_000, info: INFO.replace('bpp=4', 'bpp=2') });
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording, message: expect.stringContaining('bpp 2') });

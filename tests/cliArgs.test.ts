@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReplayLength, parseCli, parseDuration } from '../src/cliArgs.js';
+import { formatReplayLength, parseCli, parseDuration, prepareMessage } from '../src/cliArgs.js';
 import { ExitCode } from '../src/errors.js';
 import { DEFAULT_MAX_DURATION_MS } from '../src/constants.js';
 
@@ -82,5 +82,13 @@ describe('formatReplayLength', () => {
     expect(formatReplayLength(8220)).toBe('2:18');
     expect(formatReplayLength(32760)).toBe('9:10');
     expect(formatReplayLength(0)).toBe('0:00');
+  });
+});
+
+describe('prepareMessage', () => {
+  it('says Ready only when nothing went wrong', () => {
+    expect(prepareMessage({ emulatorUpdated: true })).toBe('Ready (emulator downloaded).');
+    expect(prepareMessage({ emulatorUpdated: false })).toBe('Ready.');
+    expect(prepareMessage({ emulatorUpdated: false, warning: 'Could not check' })).toBeNull();
   });
 });

@@ -101,7 +101,7 @@ export function defaultDeps(): ConvertDeps {
       await ensureWinePrefix(app.wineprefixDir, {
         exists: pathExists,
         writeMarker: (p) => writeFile(p, 'ok\n'),
-        removeDir: (p) => rm(p, { recursive: true, force: true }),
+        removeDir: (p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }),
         run,
         onSetup,
         signal,
@@ -201,17 +201,28 @@ export interface PrepareResult {
 // Everything a conversion needs except the Fightcade files: run at Docker image build time, or once on a
 // server, so later conversions start immediately.
 export async function prepare(
-  options: { signal?: AbortSignal; log?: (msg: string) => void; onProgress?: (e: ProgressEvent) => void; forceUpdate?: boolean },
+  options: {
+    signal?: AbortSignal;
+    log?: (msg: string) => void;
+    debug?: (msg: string) => void;
+    onProgress?: (e: ProgressEvent) => void;
+    forceUpdate?: boolean;
+  },
   deps: ConvertDeps = defaultDeps(),
 ): Promise<PrepareResult> {
   const release = await deps.acquireLock();
   try {
     await deps.checkTools();
     options.onProgress?.({ phase: 'preparing' });
-    await deps.locateFfmpeg(null, options.signal);
+    const ffmpeg = await deps.locateFfmpeg(null, options.signal);
+    options.debug?.(`ffmpeg: ${ffmpeg}`);
     const ensured = await deps.ensureEmulator(null, { force: options.forceUpdate ?? true, local: false, signal: options.signal });
+    // A Ctrl-C during the download comes back as a warning (the installed build is kept): it is an interruption.
+    if (options.signal?.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
     if (ensured.warning) options.log?.(`Warning: ${ensured.warning}`);
+    options.debug?.(ensured.updated ? 'Emulator: downloaded' : ensured.warning ? 'Emulator: kept the installed build' : 'Emulator: up to date');
     await deps.prepareWine(null, () => options.onProgress?.({ phase: 'setting-up-wine' }), options.signal);
+    options.debug?.('Wine: ready');
     return { emulatorUpdated: ensured.updated, warning: ensured.warning };
   } catch (err) {
     if (options.signal?.aborted && !(err instanceof ConvertError && err.exitCode === ExitCode.Interrupted)) {

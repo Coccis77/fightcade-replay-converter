@@ -33,6 +33,11 @@ export type CliRequest =
   | { command: 'prepare'; verbose: boolean }
   | { command: 'serve'; port: number; host: string; fightcadeDir?: string; keepMs?: number; verbose: boolean };
 
+export function prepareMessage(result: { emulatorUpdated: boolean; warning?: string }): string | null {
+  if (result.warning) return null; // the warning was printed; the exit code says it failed
+  return result.emulatorUpdated ? 'Ready (emulator downloaded).' : 'Ready.';
+}
+
 export function formatReplayLength(frames: number): string {
   const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;

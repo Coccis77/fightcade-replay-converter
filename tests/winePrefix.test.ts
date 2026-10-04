@@ -51,12 +51,13 @@ describe('ensureWinePrefix', () => {
     await ensureWinePrefix(PREFIX, { ...f.deps, onSetup: () => (announced = true) });
     expect(announced).toBe(true);
     expect(f.calls).toEqual([
+      'wineserver -k', // Wine left by an earlier crashed run would keep the old prefix busy
       `rm ${PREFIX}`,
       'wine wineboot -i',
       'wine reg add HKCU\\Software\\Wine\\Drivers /v Graphics /d null /f',
       'wineserver -w',
     ]);
-    expect(f.envs[0]).toMatchObject({ WINEPREFIX: PREFIX, WINEDLLOVERRIDES: 'mscoree,mshtml=' });
+    expect(f.envs[1]).toMatchObject({ WINEPREFIX: PREFIX, WINEDLLOVERRIDES: 'mscoree,mshtml=' });
     expect(f.files.has(READY)).toBe(true);
   });
 
@@ -64,7 +65,7 @@ describe('ensureWinePrefix', () => {
     const f = fake();
     f.files.add(`${PREFIX}/.fc2mp4-ready`);
     await ensureWinePrefix(PREFIX, f.deps);
-    expect(f.calls[0]).toBe(`rm ${PREFIX}`);
+    expect(f.calls.slice(0, 2)).toEqual(['wineserver -k', `rm ${PREFIX}`]);
     expect(f.files.has(READY)).toBe(true);
   });
 
@@ -116,10 +117,23 @@ describe('ensureWinePrefix', () => {
     try {
       const f = fake();
       await ensureWinePrefix(PREFIX, f.deps);
-      expect(f.envs[0]).not.toHaveProperty('DISPLAY');
-      expect(f.envs[0]).not.toHaveProperty('WAYLAND_DISPLAY');
+      expect(f.envs[1]).not.toHaveProperty('DISPLAY');
+      expect(f.envs[1]).not.toHaveProperty('WAYLAND_DISPLAY');
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('explains a prefix that cannot be deleted', async () => {
+    const f = fake();
+    const removeDir = async () => {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    };
+    await expect(ensureWinePrefix(PREFIX, { ...f.deps, removeDir })).rejects.toMatchObject({
+      exitCode: ExitCode.Emulator,
+      message: 'Could not reset the Wine environment: EACCES: permission denied',
+      hint: `Delete ${PREFIX} and try again`,
+    });
+    expect(f.calls).not.toContain('wine wineboot -i');
   });
 });

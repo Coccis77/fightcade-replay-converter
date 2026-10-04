@@ -55,7 +55,8 @@ export async function locateInstall(opts: {
   exists: (p: string) => Promise<boolean>;
 }): Promise<FightcadeInstall> {
   const platform = supportedPlatform(opts.platform);
-  for (const root of opts.override ? [opts.override] : candidateRoots(platform, opts.home, opts.env)) {
+  const roots = opts.override ? [opts.override] : candidateRoots(platform, opts.home, opts.env);
+  for (const root of roots) {
     if (platform === 'linux') {
       // Linux: a Fightcade root, or the fbneo folder itself (files-only server folder). No exe needed.
       const asRoot = installLayout(root, 'linux');
@@ -71,7 +72,7 @@ export async function locateInstall(opts: {
     throw new ConvertError(
       ExitCode.Preflight,
       'Fightcade files not found',
-      `Pass --fightcade-dir (or set FC2MP4_FIGHTCADE_DIR) to a folder containing emulator/fbneo/ggponet.dll, or to the fbneo folder itself containing ggponet.dll and ROMs/${opts.override ? ` (checked ${opts.override})` : ''}`,
+      `Pass --fightcade-dir (or set FC2MP4_FIGHTCADE_DIR) to a folder containing emulator/fbneo/ggponet.dll, or to the fbneo folder itself containing ggponet.dll and ROMs/. Checked: ${roots.join(', ')}`,
     );
   }
   const what = platform === 'darwin' ? 'FightCade2.app' : 'your Fightcade folder';

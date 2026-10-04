@@ -144,6 +144,8 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
         throw new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the quark ID and that Fightcade replay servers are reachable');
       }
       if (elapsed >= opts.maxDurationMs) {
+        // Nothing to keep yet: say so instead of letting ffmpeg fail on an empty video.
+        if (!started) throw new ConvertError(ExitCode.Recording, 'The replay had not started when --max-duration was reached', 'Use a longer --max-duration');
         endReason = 'max-duration';
         await emulator.kill();
         break;

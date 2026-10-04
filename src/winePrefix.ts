@@ -6,7 +6,7 @@ import { APT_HINT } from './install.js';
 export { APT_HINT } from './install.js';
 
 // Our own 32-bit prefix: the user's WINEPREFIX (if any) is never used or modified. Mono/Gecko are
-// disabled so Wine never opens their installer dialogs, which nobody can click on a virtual display.
+// disabled so Wine never opens their installer dialogs, which nobody could click without a display.
 export function wineEnv(prefix: string): Record<string, string> {
   return { WINEARCH: 'win32', WINEPREFIX: prefix, WINEDEBUG: '-all', WINEDLLOVERRIDES: 'mscoree,mshtml=' };
 }
@@ -43,8 +43,6 @@ export async function ensureWinePrefix(
   const marker = join(prefix, READY_MARKER);
   if (await deps.exists(marker)) return;
   deps.onSetup?.();
-  // Our own cache: start clean (also replaces an older fc2mp4's prefix).
-  await deps.removeDir(prefix);
   const interrupted = () => new ConvertError(ExitCode.Interrupted, 'Interrupted');
 
   const env = withoutDisplay({ ...process.env, ...wineEnv(prefix) });
@@ -53,6 +51,15 @@ export async function ensureWinePrefix(
     await stopWine();
     throw error;
   };
+
+  // Our own cache: start clean (also replaces an older fc2mp4's prefix). Wine left running by an earlier
+  // crashed run is stopped first, or it would keep using the deleted folder.
+  await stopWine();
+  try {
+    await deps.removeDir(prefix);
+  } catch (err) {
+    throw new ConvertError(ExitCode.Emulator, `Could not reset the Wine environment: ${err instanceof Error ? err.message : String(err)}`, `Delete ${prefix} and try again`);
+  }
 
   for (const step of SETUP_STEPS) {
     // A signal that is already aborted never fires 'abort': check before starting each step.

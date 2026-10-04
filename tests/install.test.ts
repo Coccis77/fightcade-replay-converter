@@ -73,6 +73,15 @@ describe('preflight', () => {
   });
 });
 
+describe('Linux Fightcade files not found', () => {
+  it('lists the folders it checked, including FC2MP4_FIGHTCADE_DIR', async () => {
+    const env = { FC2MP4_FIGHTCADE_DIR: '/mnt/c/Fightcade' };
+    await expect(locateInstall({ platform: 'linux', home: '/home/a', env, exists: async () => false })).rejects.toMatchObject({
+      hint: expect.stringContaining('Checked: /mnt/c/Fightcade, /home/a/Fightcade, /home/a/fightcade, /opt/fightcade'),
+    });
+  });
+});
+
 describe('Linux Fightcade files', () => {
   const home = '/home/a';
   const which = async (cmd: string) => `/usr/bin/${cmd}`;
