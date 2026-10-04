@@ -221,6 +221,13 @@ describe('headless launch on Linux', () => {
     expect(opts.env).toMatchObject({ WINEPREFIX: prefix, WINEARCH: 'win32', FC2MP4_VIDEO: 'Z:\\x', PATH: '/usr/bin' });
   });
 
+  it('hides any display from the emulator on Linux (desktop, WSLg)', () => {
+    const opts = emulatorSpawnOptions(linux, rt, {}, prefix, { DISPLAY: ':0', WAYLAND_DISPLAY: 'wayland-0', PATH: '/usr/bin' });
+    expect(opts.env).not.toHaveProperty('DISPLAY');
+    expect(opts.env).not.toHaveProperty('WAYLAND_DISPLAY');
+    expect(opts.env).toMatchObject({ PATH: '/usr/bin', WINEPREFIX: prefix });
+  });
+
   it('keeps macOS and Windows launches as they were', () => {
     const mac = installLayout('/Applications/FightCade2.app', 'darwin');
     expect(emulatorSpawnOptions(mac, '/rt', {}, null, {})).toMatchObject({ detached: false });

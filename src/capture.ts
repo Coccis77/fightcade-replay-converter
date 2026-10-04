@@ -10,7 +10,7 @@ import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleM
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
 import { streamArg } from './replayRef.js';
-import { wineEnv } from './winePrefix.js';
+import { wineEnv, withoutDisplay } from './winePrefix.js';
 import { fifoTransport, pipeName, pipeTransport, winPath, type VideoTransport } from './transport.js';
 
 export { winPath } from './transport.js';
@@ -73,7 +73,7 @@ export function emulatorSpawnOptions(
   const linux = install.platform === 'linux' && winePrefix !== null;
   return {
     cwd: runtimeDir,
-    env: { ...base, ...(linux ? wineEnv(winePrefix) : {}), ...env },
+    env: linux ? withoutDisplay({ ...base, ...wineEnv(winePrefix), ...env }) : { ...base, ...env },
     detached: linux, // own process group, so every Wine process of the run is stopped together
     stdio: 'ignore',
   };

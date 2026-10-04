@@ -103,6 +103,12 @@ PATCHES = [
         replacement='\t\tif (!Fc2mp4DumpActive()) ShowWindow(hScrnWnd, nAppShowCmd);',
     ),
     Patch(
+        name='hide-main-window-focus',
+        file='src/burner/win32/run.cpp',
+        anchor='\t\tSetForegroundWindow(hScrnWnd);\n',
+        replacement='\t\tif (!Fc2mp4DumpActive()) SetForegroundWindow(hScrnWnd);\n',
+    ),
+    Patch(
         name='hide-progress-box',
         file='src/burner/win32/progress.cpp',
         anchor='int ProgressCreate()\n{\n',

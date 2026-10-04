@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { APT_HINT, ensureWinePrefix, wineEnv } from '../src/winePrefix.js';
 import type { RunFn } from '../src/exec.js';
 import { ExitCode } from '../src/errors.js';
@@ -97,5 +97,29 @@ describe('ensureWinePrefix', () => {
     await expect(ensureWinePrefix(PREFIX, { ...f.deps, run, signal: controller.signal })).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
     expect(f.calls.at(-1)).toBe('wineserver -k');
     expect(f.files.has(READY)).toBe(false);
+  });
+
+  it('stops at once when Ctrl-C arrives while the old prefix is being deleted', async () => {
+    const f = fake();
+    const controller = new AbortController();
+    const removeDir = async () => {
+      controller.abort();
+    };
+    await expect(ensureWinePrefix(PREFIX, { ...f.deps, removeDir, signal: controller.signal })).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
+    expect(f.calls).not.toContain('wine wineboot -i');
+    expect(f.files.has(READY)).toBe(false);
+  });
+
+  it('hides any display from Wine, so a desktop or WSLg never gets a window', async () => {
+    vi.stubEnv('DISPLAY', ':0');
+    vi.stubEnv('WAYLAND_DISPLAY', 'wayland-0');
+    try {
+      const f = fake();
+      await ensureWinePrefix(PREFIX, f.deps);
+      expect(f.envs[0]).not.toHaveProperty('DISPLAY');
+      expect(f.envs[0]).not.toHaveProperty('WAYLAND_DISPLAY');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

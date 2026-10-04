@@ -81,9 +81,9 @@ class ShippedPatchSetTest(unittest.TestCase):
         # Without FC2MP4_* the emulator must behave like stock FBNeo.
         from patches import PATCHES
         recording = [p for p in PATCHES if p.name.startswith(('recording-', 'hide-'))]
-        self.assertEqual(len(recording), 8)
+        self.assertEqual(len(recording), 9)
         for p in recording:
-            if p.name.endswith(('-select', '-window', '-box')):
+            if p.name.endswith(('-select', '-window', '-focus', '-box')):
                 self.assertIn('Fc2mp4DumpActive()', p.replacement, p.name)
 
 

@@ -15,6 +15,13 @@ export function wineEnv(prefix: string): Record<string, string> {
 // deleted and set up again.
 const READY_MARKER = '.fc2mp4-ready-2';
 
+// Wine must never see a display (a desktop session, WSLg): with the null driver set in our prefix,
+// every Linux run then behaves exactly like a headless server.
+export function withoutDisplay(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { DISPLAY: _display, WAYLAND_DISPLAY: _wayland, ...rest } = env;
+  return rest;
+}
+
 // Wine's null display driver, set once in our prefix: the emulator (which shows no window while
 // recording) runs with plain `wine`, without any display, and its exit code reaches us.
 const SETUP_STEPS: string[][] = [
@@ -38,8 +45,9 @@ export async function ensureWinePrefix(
   deps.onSetup?.();
   // Our own cache: start clean (also replaces an older fc2mp4's prefix).
   await deps.removeDir(prefix);
+  const interrupted = () => new ConvertError(ExitCode.Interrupted, 'Interrupted');
 
-  const env = { ...process.env, ...wineEnv(prefix) };
+  const env = withoutDisplay({ ...process.env, ...wineEnv(prefix) });
   const stopWine = () => deps.run('wineserver', ['-k'], { env, timeoutMs: 15_000 }).catch(() => undefined);
   const fail = async (error: ConvertError): Promise<never> => {
     await stopWine();
@@ -47,8 +55,10 @@ export async function ensureWinePrefix(
   };
 
   for (const step of SETUP_STEPS) {
+    // A signal that is already aborted never fires 'abort': check before starting each step.
+    if (deps.signal?.aborted) await fail(interrupted());
     const result = await deps.run('wine', step, { env, timeoutMs: 5 * 60_000, signal: deps.signal, detached: true });
-    if (deps.signal?.aborted) await fail(new ConvertError(ExitCode.Interrupted, 'Interrupted'));
+    if (deps.signal?.aborted) await fail(interrupted());
     const output = `${result.stdout}\n${result.stderr}`;
     if (/wine32 is missing|ELFCLASS32|wrong ELF class/i.test(output)) {
       await fail(new ConvertError(ExitCode.Preflight, '32-bit Wine is missing (needed by the Fightcade emulator)', APT_HINT));
