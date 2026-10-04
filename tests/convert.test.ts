@@ -21,6 +21,9 @@ function harness(over: Partial<ConvertDeps> = {}) {
     preflight: async () => {
       calls.push('preflight');
     },
+    checkWritable: async (dir) => {
+      calls.push(`writable:${dir}`);
+    },
     locateFfmpeg: async (_install, signal) => {
       calls.push(signal ? 'ffmpeg:signal' : 'ffmpeg');
       return '/usr/bin/ffmpeg';
@@ -64,9 +67,19 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
+  });
+
+  it('fails before capturing when the output folder is not writable', async () => {
+    const { deps, calls } = harness({
+      checkWritable: async (dir) => {
+        throw new ConvertError(ExitCode.Preflight, `Cannot write to ${dir}`);
+      },
+    });
+    await expect(convert(ID, baseOptions, deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, message: 'Cannot write to /out' });
+    expect(calls).toEqual(['lock', 'preflight', 'unlock']);
   });
 
   it('removes the temp dir and releases the lock when capture fails, without muxing', async () => {

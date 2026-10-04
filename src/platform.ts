@@ -35,6 +35,9 @@ export function appPaths(platform: Platform, home: string, env: Record<string, s
     cacheDir = p.join(home, 'Library', 'Caches', 'fc2mp4');
     outputDir = p.join(home, 'Movies', 'Fightcade');
   }
+  // Docker and servers choose the output folder without passing -o on every run.
+  const custom = env.FC2MP4_OUTPUT_DIR;
+  if (custom && p.isAbsolute(custom)) outputDir = custom;
   return {
     cacheDir,
     runtimeDir: p.join(cacheDir, 'runtime'),

@@ -10,7 +10,7 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
 Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
 
   -o, --output <path>       MP4 file, or an existing folder
-                            (default: ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
+                            (default: FC2MP4_OUTPUT_DIR, else ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
       --scale sharp|smooth  Upscaling style (default: sharp)
       --max-duration <d>    Stop capturing after this long: 90s, 45m, 1h (default: 60m)
       --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows;

@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
@@ -47,6 +48,7 @@ export interface ConvertDeps {
   resolveOutput(quarkId: string, output?: string): Promise<string>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
+  checkWritable(dir: string): Promise<void>;
   locateFfmpeg(install: FightcadeInstall, signal?: AbortSignal): Promise<string>;
   ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
@@ -67,6 +69,18 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists, which: (cmd) => which(cmd, platform) }),
+    checkWritable: async (dir) => {
+      try {
+        await mkdir(dir, { recursive: true });
+        await access(dir, constants.W_OK);
+      } catch {
+        throw new ConvertError(
+          ExitCode.Preflight,
+          `Cannot write to ${dir}`,
+          'Choose another folder with -o, or make this one writable (in Docker: the folder mounted at /videos must be writable by uid 1000)',
+        );
+      }
+    },
     locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),
     ensureEmulator: async (install, opts) => {
       const dir = emulatorDir();
@@ -105,6 +119,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
   let dir: string | undefined;
   try {
     await deps.preflight(install);
+    await deps.checkWritable(dirname(output));
     // First run on Windows downloads ffmpeg and the emulator: say so before going quiet.
     options.onProgress?.({ phase: 'preparing' });
     const ffmpeg = await deps.locateFfmpeg(install, options.signal);

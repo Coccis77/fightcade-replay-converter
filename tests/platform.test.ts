@@ -59,3 +59,15 @@ describe('platform (Linux)', () => {
     expect(appPaths('linux', '/home/a', {}).cacheDir).toBe('/home/a/.cache/fc2mp4');
   });
 });
+
+describe('FC2MP4_OUTPUT_DIR', () => {
+  it('replaces the default output folder on every platform when absolute', () => {
+    expect(appPaths('linux', '/home/a', { FC2MP4_OUTPUT_DIR: '/videos' }).outputDir).toBe('/videos');
+    expect(appPaths('darwin', '/Users/a', { FC2MP4_OUTPUT_DIR: '/Volumes/Clips' }).outputDir).toBe('/Volumes/Clips');
+    expect(appPaths('win32', 'C:\\Users\\a', { FC2MP4_OUTPUT_DIR: 'D:\\Clips' }).outputDir).toBe('D:\\Clips');
+  });
+  it('ignores an empty or relative value', () => {
+    expect(appPaths('linux', '/home/a', { FC2MP4_OUTPUT_DIR: '' }).outputDir).toBe('/home/a/Videos/Fightcade');
+    expect(appPaths('linux', '/home/a', { FC2MP4_OUTPUT_DIR: 'videos' }).outputDir).toBe('/home/a/Videos/Fightcade');
+  });
+});
