@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from build import cache_key
+from build import cache_key, fc2mp4_sources
 
 
 class CacheKeyTest(unittest.TestCase):
@@ -74,6 +74,12 @@ class RuntimeCheckTest(unittest.TestCase):
         self.assertTrue(links_legacy_msvcrt(self.write(b'MZ....KERNEL32.dll\0MSVCRT.dll\0')))
         self.assertTrue(links_legacy_msvcrt(self.write(b'MZ....msvcrt.dll\0')))
         self.assertFalse(links_legacy_msvcrt(self.write(b'MZ....api-ms-win-crt-stdio-l1-1-0.dll\0')))
+
+
+class Fc2mp4SourcesTest(unittest.TestCase):
+    def test_compiles_every_fc2mp4_source(self):
+        names = [os.path.basename(p) for p in fc2mp4_sources()]
+        self.assertEqual(names, ['fc2mp4_dump.cpp', 'fc2mp4_headless.cpp'])
 
 
 if __name__ == '__main__':

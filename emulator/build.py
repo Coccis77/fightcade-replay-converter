@@ -95,6 +95,12 @@ def fetch(source_dir, ref):
     return run(['git', '-C', source_dir, 'rev-parse', 'HEAD']).strip()
 
 
+def fc2mp4_sources(here=HERE):
+    """fc2mp4's own C++ files, compiled together with the patched emulator."""
+    src = os.path.join(here, 'src')
+    return sorted(os.path.join(src, f) for f in os.listdir(src) if f.endswith('.cpp'))
+
+
 def cache_key(commit, fc2mp4_dir, compiler_version):
     """Object cache key: everything that affects code generation, compared by content, not mtime."""
     digest = hashlib.sha256(compiler_version.encode())
@@ -219,7 +225,7 @@ def build(source_root, out_dir, commit, ggponet, jobs):
     stub = os.path.join(HERE, 'stubs', 'hq_shared32.cpp')
     sources = [stub if s.endswith('/scalers/hq_shared32.cpp') else s for s in sources]
     sources = [os.path.join(gen, os.path.basename(s)) if '/visualstudio-2015/generated/' in s else s for s in sources]
-    sources.append(os.path.join(HERE, 'src', 'fc2mp4_dump.cpp'))
+    sources.extend(fc2mp4_sources())
     generate(source_root, gen, os.path.join(obj, 'host'), sources)
 
     shims = write_case_shims(os.path.join(obj, 'shims'))
