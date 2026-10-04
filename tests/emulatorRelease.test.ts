@@ -184,3 +184,26 @@ describe('defaultReleaseDeps on a first run', () => {
     }
   });
 });
+
+describe('GitHub API authentication', () => {
+  it('sends GITHUB_TOKEN when set (CI image builds), and no Authorization otherwise', async () => {
+    const { vi } = await import('vitest');
+    const { defaultReleaseDeps } = await import('../src/emulatorRelease.js');
+    const seen: Array<Record<string, string>> = [];
+    vi.stubGlobal('fetch', async (_url: string, init: { headers: Record<string, string> }) => {
+      seen.push(init.headers);
+      return new Response('[]');
+    });
+    try {
+      vi.stubEnv('GITHUB_TOKEN', 'ghs_test');
+      await defaultReleaseDeps('/tmp/unused', null).listReleases();
+      vi.stubEnv('GITHUB_TOKEN', '');
+      await defaultReleaseDeps('/tmp/unused', null).listReleases();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+    expect(seen[0]).toMatchObject({ Authorization: 'Bearer ghs_test' });
+    expect(seen[1]).not.toHaveProperty('Authorization');
+  });
+});

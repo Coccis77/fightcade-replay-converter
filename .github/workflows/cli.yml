@@ -59,7 +59,9 @@ jobs:
         with:
           name: fc2mp4-linux-x64
       - name: Build image
-        run: docker build -t fc2mp4:test .
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: docker build --secret id=gh,env=GITHUB_TOKEN -t fc2mp4:test .
       - name: Check image
         run: bash scripts/check-image.sh fc2mp4:test "$(node -p "require('./package.json').version")"
       - name: Publish to ghcr.io

@@ -1,6 +1,7 @@
 # fc2mp4: Fightcade 3rd Strike replay -> MP4, headless (x86-64 only).
-# Mount your Fightcade folder at /fightcade (read-only) and an output folder at /videos:
-#   docker run --rm -v /path/to/Fightcade:/fightcade:ro -v "$PWD/videos":/videos ghcr.io/coccis77/fc2mp4 <replay link>
+# Mount your Fightcade folder at /fightcade (read-only) and an output folder at /videos, writable by
+# uid 1000 (create it first, or Docker Engine creates it owned by root):
+#   mkdir -p videos && docker run --rm -v /path/to/Fightcade:/fightcade:ro -v "$PWD/videos":/videos ghcr.io/coccis77/fc2mp4 <replay link>
 # The build context must contain fc2mp4-linux-x64 (from the release workflow).
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
@@ -19,6 +20,8 @@ COPY --chmod=755 fc2mp4-linux-x64 /usr/local/bin/fc2mp4
 USER fc2mp4
 ENV FC2MP4_FIGHTCADE_DIR=/fightcade FC2MP4_OUTPUT_DIR=/videos
 # The emulator and the Wine environment live in the image: every container starts converting at once.
-RUN fc2mp4 prepare
+# GITHUB_TOKEN (optional BuildKit secret "gh") avoids the API rate limit on shared CI runners; it is not
+# stored in the image.
+RUN --mount=type=secret,id=gh,env=GITHUB_TOKEN fc2mp4 prepare
 WORKDIR /videos
 ENTRYPOINT ["/usr/bin/tini", "--", "fc2mp4"]

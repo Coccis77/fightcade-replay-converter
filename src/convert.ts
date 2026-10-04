@@ -79,7 +79,7 @@ export function defaultDeps(): ConvertDeps {
         throw new ConvertError(
           ExitCode.Preflight,
           `Cannot write to ${dir}`,
-          'Choose another folder with -o, or make this one writable (in Docker: the folder mounted at /videos must be writable by uid 1000)',
+          'Choose another folder with -o, or make this one writable (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)',
         );
       }
     },

@@ -128,7 +128,9 @@ export function defaultReleaseDeps(runtimeDir: string, localBuild: ReleaseDeps['
   const within = (ms: number) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   const manifestPath = join(runtimeDir, 'manifest.json');
   const exePath = join(runtimeDir, EMULATOR_EXE);
-  const headers = { 'User-Agent': 'fc2mp4', Accept: 'application/vnd.github+json' };
+  const headers: Record<string, string> = { 'User-Agent': 'fc2mp4', Accept: 'application/vnd.github+json' };
+  // Unauthenticated API calls share a 60/hour limit per IP (CI runners, servers); a token lifts it.
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return {
     listReleases: async () => {
       const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, { headers, signal: within(20_000) });

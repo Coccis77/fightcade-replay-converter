@@ -32,6 +32,7 @@ binary instead, Docker would emulate it slowly). Fightcade's files are not in th
 own Fightcade folder (or its `emulator/fbneo` folder) read-only.
 
 ```bash
+mkdir -p videos   # create it first: a folder Docker creates belongs to root, and the container can't write to it
 docker run --rm \
   -v /path/to/Fightcade:/fightcade:ro \
   -v "$PWD/videos":/videos \
