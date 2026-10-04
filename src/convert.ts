@@ -17,6 +17,7 @@ import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
 import { parseReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
+import { defaultSilentAudioDeps, startSilentAudio, type SilentAudio } from './silentAudio.js';
 import { ensureWinePrefix } from './winePrefix.js';
 
 export type ProgressEvent =
@@ -55,6 +56,7 @@ export interface ConvertDeps {
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   prepareWine(install: FightcadeInstall | null, onSetup: () => void, signal?: AbortSignal): Promise<void>;
   makeTempDir(): Promise<string>;
+  startAudio(install: FightcadeInstall, dir: string): Promise<SilentAudio>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
   mux(args: { video: string; audio: string; output: string }, ffmpeg: string): Promise<void>;
@@ -99,6 +101,8 @@ export function defaultDeps(): ConvertDeps {
       await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, writeMarker: (p) => writeFile(p, 'ok\n'), run, onSetup, signal });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
+    startAudio: async (install, dir) =>
+      install.platform === 'linux' ? startSilentAudio(dir, defaultSilentAudioDeps()) : { env: {}, stop: async () => {} },
     capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg, install.platform === 'linux' ? app.wineprefixDir : null), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
@@ -134,13 +138,20 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });
-    const captured = await deps.capture(install, ref.quarkId, ffmpeg, {
-      dir,
-      scale: options.scale,
-      maxDurationMs: options.maxDurationMs,
-      signal: options.signal,
-      onProgress: (frames, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, elapsedMs }),
-    });
+    const audio = await deps.startAudio(install, dir);
+    let captured: CaptureResult;
+    try {
+      captured = await deps.capture(install, ref.quarkId, ffmpeg, {
+        dir,
+        emulatorEnv: audio.env,
+        scale: options.scale,
+        maxDurationMs: options.maxDurationMs,
+        signal: options.signal,
+        onProgress: (frames, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, elapsedMs }),
+      });
+    } finally {
+      await audio.stop().catch(() => {});
+    }
     if (captured.endReason === 'max-duration') log('Warning: reached --max-duration; the video may be cut short');
 
     options.onProgress?.({ phase: 'finalizing' });

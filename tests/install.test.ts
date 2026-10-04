@@ -106,7 +106,7 @@ describe('Linux Fightcade files', () => {
     await expect(preflight(i, { exists: async () => true, which: async (c) => (c === 'xvfb-run' ? null : `/usr/bin/${c}`) })).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
       message: expect.stringContaining('xvfb-run'),
-      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb ffmpeg',
+      hint: 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb pulseaudio ffmpeg',
     });
   });
 });
@@ -117,6 +117,10 @@ describe('checkTools', () => {
       exitCode: ExitCode.Preflight,
       message: 'Missing on this system: wine',
       hint: expect.stringContaining('apt install'),
+    });
+    await expect(checkTools('linux', async (c) => (c === 'pulseaudio' ? null : `/usr/bin/${c}`))).rejects.toMatchObject({
+      message: 'Missing on this system: pulseaudio',
+      hint: expect.stringContaining('pulseaudio'),
     });
     await expect(checkTools('linux', async (c) => `/usr/bin/${c}`)).resolves.toBeUndefined();
     await expect(checkTools('darwin', async () => null)).resolves.toBeUndefined();

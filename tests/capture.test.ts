@@ -93,6 +93,12 @@ describe('capture', () => {
     expect(log).toEqual([`transport:${DIR}`, `encoder:${DIR}/video.mp4`, 'emulator', 'close:transport']);
   });
 
+  it('adds the extra emulator environment (Linux sound device)', async () => {
+    const { deps, env } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000 });
+    await capture(deps, { ...base, emulatorEnv: { PULSE_SERVER: 'unix:/tmp/fc2mp4-x/pulse/native' } });
+    expect(env()).toMatchObject({ PULSE_SERVER: 'unix:/tmp/fc2mp4-x/pulse/native', FC2MP4_IDLE_MS: '15000' });
+  });
+
   it('fails within firstFrameMs when the stream never starts, killing both processes', async () => {
     const { deps, log, time } = harness({});
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording });

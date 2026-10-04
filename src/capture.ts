@@ -37,6 +37,8 @@ export interface CaptureOptions {
   maxDurationMs: number;
   signal?: AbortSignal;
   onProgress?: (frames: number, elapsedMs: number) => void;
+  // Extra environment for the emulator (Linux: the silent sound device).
+  emulatorEnv?: Record<string, string>;
 }
 
 export interface CaptureResult {
@@ -99,6 +101,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
   const attach = transport.encoderInput === 'pipe:0' ? (stdin: Writable) => transport.attach(stdin) : null;
   const encoder = deps.startEncoder(videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale }), (n) => (frames = n), attach);
   const emulator = deps.startEmulator({
+    ...opts.emulatorEnv,
     FC2MP4_VIDEO: transport.emulatorPath,
     FC2MP4_AUDIO: deps.toEmulatorPath(audio),
     FC2MP4_INFO: deps.toEmulatorPath(info),

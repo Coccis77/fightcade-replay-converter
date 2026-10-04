@@ -11,7 +11,7 @@ faster than real time. Windows, macOS and Linux. Free and non-commercial.
 - **macOS:** download `fc2mp4-macos-arm64`, `chmod +x` it, and install ffmpeg (`brew install ffmpeg`).
   Needs Fightcade 2 with 3rd Strike opened once.
 - **Linux (x86_64, headless):** download `fc2mp4-linux-x64`, `chmod +x` it, and install the system
-  packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb ffmpeg`.
+  packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb pulseaudio ffmpeg`.
   Point it at Fightcade's files with `--fightcade-dir` (or `FC2MP4_FIGHTCADE_DIR`): either a Fightcade
   folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and `ROMs/sfiii3nr1.zip` +
   `ROMs/sfiii3.zip`. No screen is needed: it runs on a virtual display.

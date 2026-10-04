@@ -2,7 +2,7 @@ import { GAME } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { pathFor, supportedPlatform, type Platform } from './platform.js';
 
-export const APT_HINT = 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb ffmpeg';
+export const APT_HINT = 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 xvfb pulseaudio ffmpeg';
 
 export interface FightcadeInstall {
   platform: Platform;
@@ -91,7 +91,7 @@ export interface PreflightDeps {
 export async function checkTools(platform: Platform, which: (cmd: string) => Promise<string | null>): Promise<void> {
   if (platform !== 'linux') return;
   const missing: string[] = [];
-  for (const tool of ['wine', 'xvfb-run']) if ((await which(tool)) === null) missing.push(tool);
+  for (const tool of ['wine', 'xvfb-run', 'pulseaudio']) if ((await which(tool)) === null) missing.push(tool);
   if (missing.length > 0) throw new ConvertError(ExitCode.Preflight, `Missing on this system: ${missing.join(', ')}`, APT_HINT);
 }
 
