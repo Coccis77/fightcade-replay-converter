@@ -43,6 +43,15 @@ describe('web page routes', () => {
     expect(() => new Function(script)).not.toThrow();
   });
 
+  it('tells when the download started, and keeps trying when the server does not answer', async () => {
+    const { base } = await start(writesMp4);
+    const html = await (await fetch(`${base}/`)).text();
+    expect(html).toContain('Done — the download has started. ');
+    expect(html).not.toContain('Done — downloading');
+    expect(html).toContain('the server may have restarted');
+    expect(html).toContain('MAX_POLL_FAILURES = 5');
+  });
+
   it('converts a pasted link and serves the MP4 as a download', async () => {
     const { base, jobs, post } = await start(writesMp4);
     const created = await post(JSON.stringify({ url: LINK }));

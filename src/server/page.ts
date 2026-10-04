@@ -68,17 +68,31 @@ export const PAGE = `<!doctype html>
     if (!item.polling) poll(id);
   }
 
+  // A network blip must not stop the updates: retry a few times before giving up.
+  var MAX_POLL_FAILURES = 5;
+
   function poll(id) {
     var item = tracked[id];
     item.polling = true;
     fetch('/api/jobs/' + id)
-      .then(function (res) { if (!res.ok) throw new Error('unknown'); return res.json(); })
+      .then(function (res) {
+        if (res.status === 404) return { state: 'failed', error: 'Unknown replay — the server may have restarted' };
+        if (!res.ok) throw new Error('status ' + res.status);
+        return res.json();
+      })
       .then(function (view) {
+        item.failures = 0;
         render(id, view);
         if (view.state === 'queued' || view.state === 'converting') setTimeout(function () { poll(id); }, 1000);
         else item.polling = false;
       })
-      .catch(function () { item.polling = false; render(id, { state: 'failed', error: 'Lost contact with the server' }); });
+      .catch(function () {
+        item.failures = (item.failures || 0) + 1;
+        if (item.failures < MAX_POLL_FAILURES) { setTimeout(function () { poll(id); }, 2000); return; }
+        item.polling = false;
+        item.failures = 0;
+        render(id, { state: 'failed', error: 'Lost contact with the server' });
+      });
   }
 
   function clock(total) {
@@ -101,7 +115,7 @@ export const PAGE = `<!doctype html>
     } else if (view.state === 'converting') {
       status.textContent = view.seconds > 0 ? 'Converting… ' + clock(view.seconds) + ' of replay (×' + view.speed.toFixed(1) + ')' : 'Converting… connecting to the replay';
     } else if (view.state === 'done') {
-      status.textContent = item.downloaded ? 'Done. ' : 'Done — downloading… ';
+      status.textContent = item.downloaded ? 'Done. ' : 'Done — the download has started. ';
       var link = document.createElement('a');
       link.href = '/api/jobs/' + id + '/file';
       link.setAttribute('download', id + '.mp4');
