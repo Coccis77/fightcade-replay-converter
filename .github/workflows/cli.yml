@@ -16,6 +16,9 @@ jobs:
           - os: macos-latest
             artifact: build/fc2mp4
             name: fc2mp4-macos-arm64
+          - os: ubuntu-latest
+            artifact: build/fc2mp4
+            name: fc2mp4-linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +30,7 @@ jobs:
           python-version: '3.12'
       - run: npm ci
       - name: Unit tests (macOS paths)
-        if: runner.os == 'macOS'
+        if: runner.os != 'Windows'
         run: npm test
       - name: Real Windows named-pipe test
         if: runner.os == 'Windows'
@@ -54,6 +57,6 @@ jobs:
         with:
           merge-multiple: true
       - run: |
-          gh release create "${GITHUB_REF_NAME}" fc2mp4.exe fc2mp4-macos-arm64 \
+          gh release create "${GITHUB_REF_NAME}" fc2mp4.exe fc2mp4-macos-arm64 fc2mp4-linux-x64 \
             --repo "${GITHUB_REPOSITORY}" --title "fc2mp4 ${GITHUB_REF_NAME}" \
             --notes "Download fc2mp4.exe (Windows) or fc2mp4-macos-arm64 (macOS), then run it with a Fightcade replay link. Unsigned: Windows SmartScreen may ask you to confirm (More info → Run anyway)."

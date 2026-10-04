@@ -7,13 +7,14 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
 
-Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS and Windows).
+Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
 
   -o, --output <path>       MP4 file, or an existing folder
-                            (default: ~/Movies/Fightcade or %USERPROFILE%\\Videos\\Fightcade)
+                            (default: ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
       --scale sharp|smooth  Upscaling style (default: sharp)
       --max-duration <d>    Stop capturing after this long: 90s, 45m, 1h (default: 60m)
-      --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows)
+      --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows;
+                            on Linux a Fightcade folder or its emulator/fbneo folder, also FC2MP4_FIGHTCADE_DIR)
   -v, --verbose             Print debug details
   -h, --help                Show this help
 
