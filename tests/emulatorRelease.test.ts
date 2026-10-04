@@ -164,3 +164,23 @@ describe('ensureEmulator', () => {
     await expect(ensureEmulator({ ...opts, local: true }, noToolchain.deps)).rejects.toMatchObject({ exitCode: ExitCode.Usage });
   });
 });
+
+describe('defaultReleaseDeps on a first run', () => {
+  it('creates the runtime folder before downloading into it', async () => {
+    const { mkdtemp, readFile } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { vi } = await import('vitest');
+    const { defaultReleaseDeps } = await import('../src/emulatorRelease.js');
+    const runtime = join(await mkdtemp(join(tmpdir(), 'fc2mp4-first-')), 'fc2mp4', 'runtime');
+    vi.stubGlobal('fetch', async () => new Response('MZ-fake-exe'));
+    try {
+      const deps = defaultReleaseDeps(runtime, null);
+      const tmp = deps.tempDownloadPath();
+      await deps.download('https://example.invalid/exe', tmp);
+      expect(await readFile(tmp, 'utf8')).toBe('MZ-fake-exe');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

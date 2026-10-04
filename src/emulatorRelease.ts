@@ -1,6 +1,6 @@
 import { createWriteStream } from 'node:fs';
-import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { EMULATOR_EXE } from './constants.js';
@@ -143,6 +143,7 @@ export function defaultReleaseDeps(runtimeDir: string, localBuild: ReleaseDeps['
     download: async (url, dest) => {
       const res = await fetch(url, { headers: { 'User-Agent': 'fc2mp4' }, signal: within(10 * 60_000) });
       if (!res.ok || !res.body) throw new Error(`download failed (HTTP ${res.status})`);
+      await mkdir(dirname(dest), { recursive: true }); // first run: the runtime folder does not exist yet
       await pipeline(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), createWriteStream(dest));
     },
     readManifest: async () => {
