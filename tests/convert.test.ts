@@ -32,6 +32,10 @@ function harness(over: Partial<ConvertDeps> = {}) {
     prepareRuntime: async (_install, refreshDlls) => {
       calls.push(`runtime:${refreshDlls}`);
     },
+    prepareWine: async (_install, onSetup) => {
+      calls.push('wine');
+      onSetup();
+    },
     makeTempDir: async () => {
       calls.push('tmp');
       return '/tmp/run';
@@ -60,7 +64,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
@@ -113,6 +117,15 @@ describe('convert', () => {
       },
     });
     await expect(convert(ID, { ...baseOptions, signal: controller.signal }, deps)).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
+  });
+
+  it('announces the one-time Wine setup', async () => {
+    const { deps, calls } = harness();
+    await convert(ID, { ...baseOptions, onProgress: (e) => calls.push(`progress:${e.phase}`) }, deps);
+    const at = calls.indexOf('progress:setting-up-wine');
+    expect(at).toBeGreaterThan(calls.indexOf('wine'));
+    expect(calls.indexOf('wine')).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(calls.indexOf('tmp'));
   });
 
   it('logs the emulator warning and carries on', async () => {

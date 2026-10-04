@@ -7,7 +7,7 @@ import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulato
 import { currentPatchSetHash } from './patchSet.js';
 import { mux, type ScaleMode } from './ffmpeg.js';
 import { ConvertError, ExitCode } from './errors.js';
-import { which } from './exec.js';
+import { run, which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
 import { locateInstall, preflight, type FightcadeInstall } from './install.js';
@@ -16,9 +16,11 @@ import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
 import { parseReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
+import { ensureWinePrefix } from './winePrefix.js';
 
 export type ProgressEvent =
   | { phase: 'preparing' }
+  | { phase: 'setting-up-wine' }
   | { phase: 'connecting' }
   | { phase: 'capturing'; frames: number; elapsedMs: number }
   | { phase: 'finalizing' };
@@ -48,6 +50,7 @@ export interface ConvertDeps {
   locateFfmpeg(install: FightcadeInstall, signal?: AbortSignal): Promise<string>;
   ensureEmulator(install: FightcadeInstall, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
+  prepareWine(install: FightcadeInstall, onSetup: () => void): Promise<void>;
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
@@ -75,6 +78,10 @@ export function defaultDeps(): ConvertDeps {
       return ensureEmulator({ patchSetHash: hash, force: opts.force, local: opts.local }, defaultReleaseDeps(app.runtimeDir, local, opts.signal));
     },
     prepareRuntime: (install, refreshDlls) => prepareRuntime(install, app.runtimeDir, refreshDlls),
+    prepareWine: async (install, onSetup) => {
+      if (install.platform !== 'linux') return;
+      await ensureWinePrefix(app.wineprefixDir, { exists: pathExists, run, onSetup });
+    },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
     capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg), opts),
     mkdir: async (dir) => {
@@ -106,6 +113,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.updated) debug('Emulator updated');
     await deps.prepareRuntime(install, ensured.updated);
+    await deps.prepareWine(install, () => options.onProgress?.({ phase: 'setting-up-wine' }));
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });

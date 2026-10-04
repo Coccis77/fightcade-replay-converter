@@ -9,6 +9,8 @@ function progressLine(e: ProgressEvent): string {
   switch (e.phase) {
     case 'preparing':
       return 'Preparing ffmpeg and the emulator (the first run downloads them)…';
+    case 'setting-up-wine':
+      return 'Setting up Wine (first run, about a minute)…';
     case 'connecting':
       return 'Connecting to the replay stream…';
     case 'capturing': {
