@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { ConvertError, ExitCode } from '../../src/errors.js';
-import { serve, type ServeDeps } from '../../src/server/serve.js';
+import { externalAddresses, serve, type ServeDeps } from '../../src/server/serve.js';
 
 function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] } {
   const runs: string[] = [];
@@ -235,5 +235,30 @@ describe('serve', () => {
       again.listen(port, '127.0.0.1', resolve);
     });
     again.close();
+  });
+});
+
+describe('externalAddresses', () => {
+  it('keeps the Wi-Fi/Ethernet addresses, not loopback, IPv6 or virtual networks (Docker, VMs, VPNs)', () => {
+    const v4 = (address: string, internal = false) => ({ address, family: 'IPv4' as const, internal, netmask: '255.255.255.0', mac: '00:00:00:00:00:00', cidr: null });
+    const v6 = (address: string) => ({ address, family: 'IPv6' as const, internal: false, netmask: 'ffff::', mac: '00:00:00:00:00:00', scopeid: 0, cidr: null });
+    expect(
+      externalAddresses({
+        lo0: [v4('127.0.0.1', true)],
+        en0: [v6('fe80::1'), v4('192.168.1.14')],
+        bridge100: [v4('192.168.64.1')],
+        docker0: [v4('172.17.0.1')],
+        'br-1a2b3c': [v4('172.18.0.1')],
+        veth12ab: [v4('169.254.1.1')],
+        vmnet8: [v4('192.168.100.1')],
+        vboxnet0: [v4('192.168.56.1')],
+        utun3: [v4('10.8.0.2')],
+        tun0: [v4('10.9.0.2')],
+        tap0: [v4('10.10.0.2')],
+        wg0: [v4('10.11.0.2')],
+        zt0: [v4('10.12.0.2')],
+        eth0: [v4('10.0.0.5')],
+      }),
+    ).toEqual(['192.168.1.14', '10.0.0.5']);
   });
 });

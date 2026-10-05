@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { homedir, networkInterfaces } from 'node:os';
+import { homedir, networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
 import { DEFAULT_MAX_DURATION_MS } from '../constants.js';
 import { convert, defaultDeps, notWritableHint, prepare } from '../convert.js';
 import { ConvertError, ExitCode } from '../errors.js';
@@ -33,6 +33,17 @@ export interface ServeDeps {
   inDocker: boolean;
 }
 
+// Virtual networks (Docker, VM bridges, VPN tunnels) are not reachable by other devices on the LAN.
+const VIRTUAL_INTERFACE = /^(docker|br-|veth|bridge|vmnet|vboxnet|utun|tun|tap|wg|zt)/;
+
+export function externalAddresses(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>): string[] {
+  return Object.entries(interfaces)
+    .filter(([name]) => !VIRTUAL_INTERFACE.test(name))
+    .flatMap(([, list]) => list ?? [])
+    .filter((a) => a.family === 'IPv4' && !a.internal)
+    .map((a) => a.address);
+}
+
 export function defaultServeDeps(options: ServeOptions): ServeDeps {
   const convertDeps = defaultDeps();
   return {
@@ -40,18 +51,14 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
     exists: pathExists,
     checkWritable: (dir) => convertDeps.checkWritable(dir),
     cleanup: defaultCleanupDeps(),
-    addresses: () =>
-      Object.values(networkInterfaces())
-        .flat()
-        .filter((a) => a !== undefined && a.family === 'IPv4' && !a.internal)
-        .map((a) => a!.address),
+    addresses: () => externalAddresses(networkInterfaces()),
     inDocker: Boolean(process.env.FC2MP4_DOCKER),
     schedule: (fn, ms) => {
       const timer = setInterval(fn, ms);
       timer.unref();
       return () => clearInterval(timer);
     },
-    // Everything the first conversion needs, checked before listening: problems show at once.
+    // Everything the first conversion needs, checked before any request is served: problems show at once.
     startup: async () => {
       const install = await convertDeps.locateInstall(options.fightcadeDir);
       await convertDeps.preflight(install);
@@ -95,8 +102,6 @@ function shownHost(host: string): string {
   return host === '0.0.0.0' || host === '127.0.0.1' || host === '::' ? 'localhost' : host;
 }
 
-// Runs until the signal aborts (Ctrl-C, SIGTERM, SIGHUP): the current conversion is aborted by the same
-// signal, queued replays are dropped, and the server closes.
 function listenError(err: NodeJS.ErrnoException, options: ServeOptions): Error {
   switch (err.code) {
     case 'EADDRINUSE':

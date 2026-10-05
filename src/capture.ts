@@ -145,7 +145,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
       }
       if (elapsed >= opts.maxDurationMs) {
         // Nothing to keep yet: say so instead of letting ffmpeg fail on an empty video.
-        if (!started) throw new ConvertError(ExitCode.Recording, 'The replay had not started when --max-duration was reached', 'Use a longer --max-duration');
+        if (!started || frames === 0) throw new ConvertError(ExitCode.Recording, 'The replay had not started when --max-duration was reached', 'Use a longer --max-duration');
         endReason = 'max-duration';
         await emulator.kill();
         break;

@@ -47,8 +47,7 @@ async function main(): Promise<number> {
       return controller.signal.aborted ? ExitCode.Interrupted : 0;
     }
     if (request.command === 'prepare') {
-      const debugPrepare = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
-      const result = await prepare({ signal: controller.signal, log, debug: debugPrepare, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
+      const result = await prepare({ signal: controller.signal, log, debug, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
       const message = prepareMessage(result);
       if (message) process.stdout.write(`${message}\n`);
       return result.warning ? ExitCode.Emulator : 0;
