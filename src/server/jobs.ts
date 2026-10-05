@@ -10,11 +10,14 @@ export type JobView =
 
 export type JobRunner = (quarkId: string, output: string, onProgress: (frames: number, elapsedMs: number) => void) => Promise<void>;
 
+export type SubmitOutcome = 'queued' | 'joined' | 'done' | 'refused' | 'stopped';
+
 export interface JobsDeps {
   outputDir: string;
   exists(p: string): Promise<boolean>;
   run: JobRunner;
   log?: (msg: string) => void;
+  onFinish?: (id: string, view: JobView) => void;
 }
 
 // One conversion at a time, in arrival order. Jobs are keyed by quark ID, so the same replay is never
@@ -32,26 +35,43 @@ export class Jobs {
     return join(this.deps.outputDir, `${id}.mp4`);
   }
 
-  async submit(id: string): Promise<void> {
+  async submit(id: string, options: { beforeQueue?: () => Promise<boolean> } = {}): Promise<SubmitOutcome> {
     if (this.stopped) {
       this.views.set(id, { state: 'failed', error: 'The server stopped' });
-      return;
+      return 'stopped';
     }
-    if (this.isBusy(id)) return;
+    if (this.isBusy(id)) return 'joined';
     // Checked every time: a finished MP4 deleted from the folder is converted again.
     if (await this.deps.exists(this.filePath(id))) {
       this.views.set(id, { state: 'done' });
-      return;
+      return 'done';
     }
-    if (this.isBusy(id)) return; // queued by another request while we checked the folder
+    if (this.isBusy(id)) return 'joined'; // queued by another request while we checked the folder
     if (this.stopped) {
       this.views.set(id, { state: 'failed', error: 'The server stopped' });
-      return;
+      return 'stopped';
     }
+    // Reserved before asking, so a second request for the same replay joins instead of asking again.
+    const previous = this.views.get(id);
     this.views.set(id, { state: 'queued', position: 0 });
+    if (options.beforeQueue && !(await options.beforeQueue())) {
+      if (previous) this.views.set(id, previous);
+      else this.views.delete(id);
+      return 'refused';
+    }
+    if (this.stopped) {
+      this.views.set(id, { state: 'failed', error: 'The server stopped' });
+      return 'stopped';
+    }
     this.queue.push(id);
     this.deps.log?.(`Queued ${id}`);
     if (this.current === null) this.worker = this.drain();
+    return 'queued';
+  }
+
+  // An entry deleted by the admin: its old "done" view must not linger.
+  forget(id: string): void {
+    if (!this.isBusy(id)) this.views.delete(id);
   }
 
   view(id: string): JobView | null {
@@ -88,6 +108,7 @@ export class Jobs {
           this.views.set(id, { state: 'converting', seconds: Math.floor(seconds), speed });
         });
         this.views.set(id, { state: 'done' });
+        this.deps.onFinish?.(id, { state: 'done' });
         this.deps.log?.(`Done ${id}`);
       } catch (err) {
         const failed: Extract<JobView, { state: 'failed' }> =
@@ -95,6 +116,7 @@ export class Jobs {
             ? { state: 'failed', error: err.message, hint: err.hint }
             : { state: 'failed', error: err instanceof Error ? err.message : String(err) };
         this.views.set(id, failed);
+        this.deps.onFinish?.(id, failed);
         this.deps.log?.(`Failed ${id}: ${failed.error}`);
       }
     }

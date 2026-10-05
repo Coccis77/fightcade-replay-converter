@@ -117,6 +117,55 @@ describe('Jobs', () => {
     expect(runs).toEqual([]);
   });
 
+  it('asks before queueing a new conversion, never for one already done or running', async () => {
+    const { jobs } = harness([`/videos/${B}.mp4`]);
+    let asked = 0;
+    const beforeQueue = async () => (asked++, true);
+    expect(await jobs.submit(A, { beforeQueue })).toBe('queued');
+    expect(await jobs.submit(A, { beforeQueue })).toBe('joined');
+    expect(await jobs.submit(B, { beforeQueue })).toBe('done');
+    expect(asked).toBe(1);
+  });
+
+  it('refuses when beforeQueue says no, leaving nothing queued', async () => {
+    const { jobs, runs } = harness();
+    expect(await jobs.submit(A, { beforeQueue: async () => false })).toBe('refused');
+    expect(jobs.view(A)).toBeNull();
+    expect(runs).toEqual([]);
+  });
+
+  it('two requests for the same new replay ask once', async () => {
+    const { jobs, runs } = harness();
+    let asked = 0;
+    const beforeQueue = () => new Promise<boolean>((resolve) => setTimeout(() => resolve((asked++, true)), 20));
+    const outcomes = await Promise.all([jobs.submit(A, { beforeQueue }), jobs.submit(A, { beforeQueue })]);
+    expect(outcomes.sort()).toEqual(['joined', 'queued']);
+    expect(asked).toBe(1);
+    expect(runs.map((r) => r.id)).toEqual([A]);
+  });
+
+  it('tells when a conversion finished, and forgets a finished one on request', async () => {
+    const finished: string[] = [];
+    const disk = new Set<string>();
+    let fail = false;
+    const jobs = new Jobs({
+      outputDir: '/videos',
+      exists: async (p) => disk.has(p),
+      run: async () => {
+        if (fail) throw new ConvertError(ExitCode.Recording, 'The replay stream never started');
+      },
+      onFinish: (id, view) => finished.push(`${id}:${view.state}`),
+    });
+    await jobs.submit(A);
+    await jobs.idle();
+    fail = true;
+    await jobs.submit(B);
+    await jobs.idle();
+    expect(finished).toEqual([`${A}:done`, `${B}:failed`]);
+    jobs.forget(A);
+    expect(jobs.view(A)).toBeNull();
+  });
+
   it('knows nothing about replays never submitted', () => {
     expect(harness().jobs.view(A)).toBeNull();
   });
