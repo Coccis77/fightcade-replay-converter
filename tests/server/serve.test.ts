@@ -1,8 +1,11 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConvertError, ExitCode } from '../../src/errors.js';
-import { externalAddresses, serve, type ServeDeps } from '../../src/server/serve.js';
+import { externalAddresses, resetAdmin, serve, type ServeDeps } from '../../src/server/serve.js';
 
 function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] } {
   const runs: string[] = [];
@@ -15,6 +18,7 @@ function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] }
     cleanup: { list: async () => [], mtimeMs: async () => 0, remove: async () => {}, now: () => 0 },
     schedule: () => () => {},
     addresses: () => [],
+    dataFile: join(tmpdir(), `fc2mp4-serve-${process.pid}-${Math.random()}.json`),
     inDocker: false,
     run: async (id) => {
       runs.push(id);
@@ -105,8 +109,10 @@ describe('serve', () => {
     });
     const running = serve({ port: 0, host: '127.0.0.1', signal: controller.signal, log: (m) => logs.push(m) }, deps);
     const base = (await started(logs)).replace('localhost', '127.0.0.1');
+    const setup = await fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'admin', password: 'password1' }) });
+    const cookie = setup.headers.get('set-cookie')!.split(';')[0]!;
     for (const url of ['1700000000000-1111', '1700000000000-2222']) {
-      await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify({ url }) });
     }
     controller.abort();
     await running;
@@ -235,6 +241,60 @@ describe('serve', () => {
       again.listen(port, '127.0.0.1', resolve);
     });
     again.close();
+  });
+  it('refuses to start on a damaged data file, and names it', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-data-'));
+    const dataFile = join(dir, 'fc2mp4-data.json');
+    await writeFile(dataFile, '{ broken');
+    await expect(serve({ port: 0, host: '127.0.0.1', signal: new AbortController().signal, log: () => {} }, fakeDeps({ dataFile }))).rejects.toMatchObject({
+      message: `The data file is damaged: ${dataFile}`,
+    });
+  });
+
+  it('reset-admin removes the admin so /admin offers the setup again', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-data-'));
+    const dataFile = join(dir, 'fc2mp4-data.json');
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const running = serve({ port: 0, host: '127.0.0.1', signal: controller.signal, log: (m) => logs.push(m) }, fakeDeps({ dataFile }));
+    const base = (await started(logs)).replace('localhost', '127.0.0.1');
+    await fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'admin', password: 'password1' }) });
+    expect(await resetAdmin(dataFile)).toBe(true);
+    expect(await (await fetch(`${base}/api/state`)).json()).toEqual({ setUp: false, user: null });
+    controller.abort();
+    await running;
+  });
+
+  it('removes deleted MP4s from the shared list when --keep cleans the folder', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-data-'));
+    const dataFile = join(dir, 'fc2mp4-data.json');
+    const DAY = 24 * 60 * 60_000;
+    const NOW = Date.now();
+    const files: Record<string, number> = {};
+    let tick: (() => void) | undefined;
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      dataFile,
+      cleanup: {
+        list: async () => Object.keys(files),
+        mtimeMs: async (p) => files[p.split('/').at(-1)!]!,
+        remove: async (p) => void delete files[p.split('/').at(-1)!],
+        now: () => NOW,
+      },
+      schedule: (fn) => ((tick = fn), () => (tick = undefined)),
+    });
+    const running = serve({ port: 0, host: '127.0.0.1', keepMs: 7 * DAY, signal: controller.signal, log: (m) => logs.push(m) }, deps);
+    const base = (await started(logs)).replace('localhost', '127.0.0.1');
+    const setup = await fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'admin', password: 'password1' }) });
+    const cookie = setup.headers.get('set-cookie')!.split(';')[0]!;
+    await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify({ url: '1700000000000-1111' }) });
+    await expect.poll(async () => ((await (await fetch(`${base}/api/conversions`, { headers: { cookie } })).json()) as { conversions: { state: string }[] }).conversions[0]?.state).toBe('done');
+    files['1700000000000-1111.mp4'] = NOW - 8 * DAY;
+    tick!();
+    await expect.poll(async () => ((await (await fetch(`${base}/api/conversions`, { headers: { cookie } })).json()) as { conversions: unknown[] }).conversions.length).toBe(0);
+    controller.abort();
+    await running;
   });
 });
 

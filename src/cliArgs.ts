@@ -8,6 +8,7 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 prepare [-v]
        fc2mp4 serve [--port <n>] [--host <addr>] [--keep <d>] [--fightcade-dir <p>] [-v]
+       fc2mp4 reset-admin
 
 Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
 
@@ -24,13 +25,15 @@ update-emulator checks GitHub for a newer emulator build now (otherwise once a d
 rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).
 prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).
 serve starts a small web page to convert replays from a browser (default http://localhost:8080; --host 0.0.0.0 or FC2MP4_HOST lets other devices in;
---keep 7d deletes its MP4s older than 7 days from the output folder, checked every hour).`;
+--keep 7d deletes its MP4s older than 7 days from the output folder, checked every hour).
+reset-admin removes the web page's admin account (the output folder's fc2mp4-data.json): /admin then offers to create it again.`;
 
 export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
   | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
   | { command: 'prepare'; verbose: boolean }
+  | { command: 'reset-admin'; verbose: boolean }
   | { command: 'serve'; port: number; host: string; fightcadeDir?: string; keepMs?: number; verbose: boolean };
 
 export function prepareMessage(result: { emulatorUpdated: boolean; warning?: string }): string | null {
@@ -83,6 +86,10 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
   const verbose = values.verbose ?? false;
 
   const command = positionals[0];
+  if (command === 'reset-admin') {
+    if (positionals.length !== 1) throw usage('reset-admin takes no arguments');
+    return { command, verbose };
+  }
   if (command === 'prepare') {
     if (positionals.length !== 1) throw usage('prepare takes no arguments');
     return { command, verbose };

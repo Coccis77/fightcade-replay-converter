@@ -65,6 +65,36 @@ deleted replay is simply converted again if someone asks for it.
 On Windows with Docker in WSL, if `http://localhost:8080` does not load, use the WSL address shown by
 `hostname -I` in Ubuntu (e.g. `http://172.25.192.17:8080`).
 
+### Accounts
+
+The page needs a login. The first visit to `/admin` creates the admin account; the admin then adds
+users there (username, temporary password, replays per day — 3 by default) and each user chooses their
+own password at first login. Everyone sees the same list of conversions, with an "Uploaded by" filter;
+only the admin can delete them. The admin has no daily limit. Users, sessions and the list live in
+`fc2mp4-data.json` in the output folder (back it up with the videos). The day resets at local midnight:
+in Docker add `-e TZ=Europe/Paris` (your time zone).
+
+Lost the admin password? `fc2mp4 reset-admin` (Docker: `docker exec <container> fc2mp4 reset-admin`),
+then open `/admin` again.
+
+### On a VPS, with HTTPS (Caddy)
+
+Run fc2mp4 on the server's own address only and let Caddy add HTTPS:
+
+```bash
+docker run -d --restart unless-stopped -p 127.0.0.1:8080:8080 -e TZ=Europe/Paris \
+  -v /srv/fightcade:/fightcade:ro -v /srv/videos:/videos \
+  ghcr.io/coccis77/fc2mp4 serve --keep 7d
+```
+
+`/etc/caddy/Caddyfile`:
+
+```
+replays.example.com {
+  reverse_proxy 127.0.0.1:8080
+}
+```
+
 ## How it works
 
 fc2mp4 runs its own copy of Fightcade's emulator, built by GitHub Actions from the public source

@@ -1,14 +1,19 @@
+import { rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { homedir, networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
+import { join } from 'node:path';
 import { DEFAULT_MAX_DURATION_MS } from '../constants.js';
 import { convert, defaultDeps, notWritableHint, prepare } from '../convert.js';
 import { ConvertError, ExitCode } from '../errors.js';
 import { pathExists } from '../fsUtil.js';
 import { appPaths, supportedPlatform } from '../platform.js';
+import { Accounts } from './accounts.js';
+import { LoginThrottle } from './auth.js';
 import { cleanOutputFolder, defaultCleanupDeps, type CleanupDeps } from './cleanup.js';
 import { createHandler } from './http.js';
 import { Jobs, type JobRunner } from './jobs.js';
+import { DataStore } from './store.js';
 
 export interface ServeOptions {
   port: number;
@@ -31,6 +36,8 @@ export interface ServeDeps {
   // This machine's network addresses, shown to reach the page from other devices.
   addresses(): string[];
   inDocker: boolean;
+  // Users, sessions and the shared list (fc2mp4-data.json in the output folder).
+  dataFile: string;
 }
 
 // Virtual networks (Docker, VM bridges, VPN tunnels) are not reachable by other devices on the LAN.
@@ -44,10 +51,21 @@ export function externalAddresses(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]
     .map((a) => a.address);
 }
 
+export function dataFilePath(outputDir: string): string {
+  return join(outputDir, 'fc2mp4-data.json');
+}
+
+// fc2mp4 reset-admin: works while serve runs (the server rereads the file when it changed).
+export function resetAdmin(dataFile: string): Promise<boolean> {
+  return new Accounts(new DataStore(dataFile)).removeAdmin();
+}
+
 export function defaultServeDeps(options: ServeOptions): ServeDeps {
   const convertDeps = defaultDeps();
+  const outputDir = appPaths(supportedPlatform(process.platform), homedir(), process.env).outputDir;
   return {
-    outputDir: appPaths(supportedPlatform(process.platform), homedir(), process.env).outputDir,
+    outputDir,
+    dataFile: dataFilePath(outputDir),
     exists: pathExists,
     checkWritable: (dir) => convertDeps.checkWritable(dir),
     cleanup: defaultCleanupDeps(),
@@ -134,12 +152,15 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
     server.once('error', (err: NodeJS.ErrnoException) => reject(listenError(err, options)));
     server.listen(options.port, options.host, () => resolve());
   });
+  let accounts!: Accounts;
   try {
     await deps.startup();
     // A folder fc2mp4 cannot write to (a root-owned Docker mount) shows now, not on the first job.
     await deps.checkWritable(deps.outputDir).catch((err: unknown) => {
       throw err instanceof ConvertError ? new ConvertError(err.exitCode, err.message, notWritableHint(true, deps.inDocker)) : err;
     });
+    accounts = new Accounts(new DataStore(deps.dataFile));
+    await accounts.isSetUp(); // reads the file: a damaged one stops the startup here, with its path
     if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
   } catch (err) {
     await new Promise((resolve) => {
@@ -149,8 +170,16 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
     throw err;
   }
 
-  const jobs = new Jobs({ outputDir: deps.outputDir, exists: deps.exists, run: deps.run, log: options.log });
-  handler = createHandler(jobs);
+  const jobs = new Jobs({
+    outputDir: deps.outputDir,
+    exists: deps.exists,
+    run: deps.run,
+    log: options.log,
+    onFinish: (id, view) => {
+      accounts.finish(id, view.state === 'done', view.state === 'failed' ? view.error : undefined).catch((err: unknown) => options.log(`Could not save the result of ${id}: ${String(err)}`));
+    },
+  });
+  handler = createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }) });
   const port = (server.address() as AddressInfo).port;
   options.log(`Open http://${shownHost(options.host)}:${port}`);
   if (options.host === '0.0.0.0' || options.host === '::') {
@@ -165,6 +194,11 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
     const sweep = async () => {
       for (const file of await cleanOutputFolder(deps.outputDir, keepMs, (id) => jobs.isBusy(id), deps.cleanup)) {
         options.log(`Deleted ${file.name} (${shownAge(file.ageMs)})`);
+        const id = /^(\d+-\d+)/.exec(file.name)?.[1];
+        if (id && !file.name.endsWith('.part.mp4')) {
+          await accounts.removeConversion(id);
+          jobs.forget(id);
+        }
       }
     };
     void sweep();
