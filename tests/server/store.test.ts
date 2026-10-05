@@ -91,4 +91,10 @@ describe('DataStore', () => {
     await server.update((d) => void d.usage.push({ name: 'bob', day: '2026-10-05', count: 1 }));
     expect(await new DataStore(FILE, fs).read((d) => d.users.map((u) => u.name))).toEqual(['bob']);
   });
+
+  it('refuses a file whose user records are broken (e.g. edited by hand)', async () => {
+    const broken = JSON.stringify({ version: 1, users: [{ name: 'bob', admin: false }], sessions: [], conversions: [], usage: [] });
+    const { fs } = memoryFs({ [FILE]: broken });
+    await expect(new DataStore(FILE, fs).read((d) => d.users.length)).rejects.toMatchObject({ message: `The data file is damaged: ${FILE}` });
+  });
 });

@@ -88,7 +88,7 @@ a { color: var(--accent); }
     show(el('div', {}, [el('h2', { text: 'Log in' }), form, error]));
   }
 
-  function showChangePassword() {
+  function showChangePassword(voluntary) {
     var current = el('input', { type: 'password', placeholder: 'Current (temporary) password', autocomplete: 'current-password', required: '' });
     var next = el('input', { type: 'password', placeholder: 'New password (8+ characters)', autocomplete: 'new-password', required: '' });
     var again = el('input', { type: 'password', placeholder: 'New password again', autocomplete: 'new-password', required: '' });
@@ -100,7 +100,9 @@ a { color: var(--accent); }
         if (r.ok) start(); else error.textContent = errorText(r.data);
       });
     } } }, [current, next, again, el('button', { text: 'Save' })]);
-    show(el('div', {}, [el('h2', { text: 'Choose your password' }), el('p', { class: 'muted', text: 'Hello ' + me.name + '. Replace the temporary password you were given.' }), form, error]));
+    var intro = voluntary ? 'Your current password, then the new one twice.' : 'Hello ' + me.name + '. Replace the temporary password you were given.';
+    var back = voluntary ? el('button', { class: 'link', text: 'Cancel', on: { click: function () { start(); } } }) : null;
+    show(el('div', {}, [el('h2', { text: voluntary ? 'Change password' : 'Choose your password' }), el('p', { class: 'muted', text: intro }), form, error, back]));
   }
 
   var quota, mine, listBody, filter, formError;
@@ -116,6 +118,7 @@ a { color: var(--accent); }
   function showApp() {
     quota = el('span', { class: 'muted', text: quotaText() });
     var logout = el('button', { class: 'link', text: 'Log out', on: { click: function () { api('POST', '/api/logout', {}).then(start); } } });
+    var changePassword = el('button', { class: 'link', text: 'Change password', on: { click: function () { showChangePassword(true); } } });
     var input = el('input', { placeholder: 'Paste a Fightcade replay link', autocomplete: 'off', required: '' });
     formError = el('div', { class: 'error' });
     var form = el('form', { on: { submit: function (e) {
@@ -134,7 +137,7 @@ a { color: var(--accent); }
     listBody = el('tbody');
     var table = el('table', {}, [el('thead', {}, [el('tr', {}, [el('th', { text: 'Replay' }), el('th', { text: 'Uploaded by' }), el('th', { text: 'Date' }), el('th', { text: 'Status' }), el('th', { text: '' })])]), listBody]);
     show(el('div', {}, [
-      el('div', { class: 'bar' }, [el('span', {}, [el('strong', { text: me.name }), el('span', { text: ' · ' }), quota]), logout]),
+      el('div', { class: 'bar' }, [el('span', {}, [el('strong', { text: me.name }), el('span', { text: ' · ' }), quota]), el('span', {}, [changePassword, document.createTextNode(' · '), logout])]),
       form, formError, mine,
       el('h2', { text: 'Conversions' }),
       el('div', { class: 'bar' }, [el('label', { class: 'muted', text: 'Uploaded by ' }, [filter])]),

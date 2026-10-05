@@ -13,8 +13,16 @@ const MAX_BODY = 4096;
 const QUARK_ID = /^\d+-\d+$/;
 const JOB_ROUTE = /^\/api\/jobs\/([^/]+)(\/file)?$/;
 
+// On every answer: the pages use only their own inline styles/scripts and talk only to this server;
+// no MIME sniffing, no embedding in other sites, no referrer sent elsewhere.
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+};
+
 function send(res: ServerResponse, status: number, type: string, body: string): void {
-  res.writeHead(status, { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
   res.end(body);
 }
 
@@ -53,6 +61,7 @@ export interface App {
   removeFile(path: string): Promise<void>;
   // Trust X-Forwarded-* from any peer (only reachable through a proxy: Docker + Caddy).
   trustProxy: boolean;
+  log?: (msg: string) => void;
 }
 
 // The JSON body as an object, or null after answering 415 / 413 / 400 itself.
@@ -111,7 +120,7 @@ async function sendFile(jobs: Jobs, id: string, res: ServerResponse): Promise<vo
   } catch {
     return json(res, 404, { error: 'There is no MP4 for this replay in the folder; paste the link again' });
   }
-  res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': size, 'Content-Disposition': `attachment; filename="${id}.mp4"` });
+  res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'video/mp4', 'Content-Length': size, 'Content-Disposition': `attachment; filename="${id}.mp4"` });
   createReadStream(file)
     .on('error', () => res.destroy())
     .pipe(res);
@@ -143,6 +152,8 @@ async function deleteConversion(app: App, id: string, res: ServerResponse): Prom
   if (app.jobs.isBusy(id)) return json(res, 409, { error: 'Wait until it has finished' });
   if (!(await app.accounts.hasConversion(id))) return json(res, 404, { error: 'Unknown replay' });
   await app.removeFile(app.jobs.filePath(id));
+  // Someone asked for it again while the file was being removed: keep their new request and its entry.
+  if (app.jobs.isBusy(id)) return json(res, 409, { error: 'Wait until it has finished' });
   await app.accounts.removeConversion(id);
   app.jobs.forget(id);
   json(res, 200, { ok: true });
@@ -219,7 +230,15 @@ async function handle(app: App, req: IncomingMessage, res: ServerResponse): Prom
   if (isAdminRoute && !user.admin) return json(res, 403, { error: 'For the admin only' });
   if (method === 'DELETE' && conversion && QUARK_ID.test(conversion[1]!)) return deleteConversion(app, conversion[1]!, res);
   if (path === '/api/admin/users') return adminUsers(app, method, null, req, res);
-  if (userRoute) return adminUsers(app, method, decodeURIComponent(userRoute[1]!), req, res);
+  if (userRoute) {
+    let name: string;
+    try {
+      name = decodeURIComponent(userRoute[1]!);
+    } catch {
+      return json(res, 400, { error: 'Bad username in the address' });
+    }
+    return adminUsers(app, method, name, req, res);
+  }
   json(res, 404, { error: 'Not found' });
 }
 
@@ -228,7 +247,8 @@ export function createHandler(app: App): (req: IncomingMessage, res: ServerRespo
     handle(app, req, res).catch((err: unknown) => {
       if (res.headersSent) return res.destroy();
       if (err instanceof AccountError) return json(res, err.status, { error: err.message, hint: err.hint });
-      if (err instanceof ConvertError) return json(res, 500, { error: err.message, hint: err.hint });
+      // Details (e.g. the data file's path) go to the server log, never to visitors.
+      app.log?.(`Error on ${req.method} ${req.url}: ${err instanceof Error ? err.message : String(err)}`);
       json(res, 500, { error: 'Internal error' });
     });
   };

@@ -16,6 +16,11 @@ describe('pages', () => {
     expect(PAGE).toMatch(/listTimer = setInterval\(loadList, 5000\)/);
   });
 
+  it('main page: anyone can change their password; admin page: asks the admin to choose one when needed', () => {
+    expect(PAGE).toContain('Change password');
+    expect(ADMIN_PAGE).toContain('Choose your password');
+  });
+
   it('admin page: valid script, setup, login, users and the add form', () => {
     expect(scripts(ADMIN_PAGE).length).toBe(1);
     for (const s of scripts(ADMIN_PAGE)) expect(() => new Function(s)).not.toThrow();

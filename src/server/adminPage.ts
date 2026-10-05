@@ -63,6 +63,7 @@ a { color: var(--accent); }
       if (!s.setUp) return showSetup();
       if (!s.user) return showLogin();
       if (!s.user.admin) return show(el('p', { text: 'This page is for the admin. You are logged in as ' + s.user.name + '.' }));
+      if (s.user.mustChangePassword) return showChangePassword();
       showUsers();
     }).catch(function () { app.textContent = 'The server is not reachable.'; setTimeout(start, 3000); });
   }
@@ -80,6 +81,22 @@ a { color: var(--accent); }
       });
     } } }, [name, password, again, el('button', { text: button })]);
     show(el('div', {}, [el('h2', { text: title }), form, error]));
+  }
+
+  // After a password reset the admin must choose a new one before using the admin routes.
+  function showChangePassword() {
+    var current = el('input', { type: 'password', placeholder: 'Current (temporary) password', autocomplete: 'current-password', required: '' });
+    var next = el('input', { type: 'password', placeholder: 'New password (8+ characters)', autocomplete: 'new-password', required: '' });
+    var again = el('input', { type: 'password', placeholder: 'New password again', autocomplete: 'new-password', required: '' });
+    var error = el('div', { class: 'error' });
+    var form = el('form', { on: { submit: function (e) {
+      e.preventDefault();
+      if (next.value !== again.value) { error.textContent = 'The two new passwords are different.'; return; }
+      api('POST', '/api/password', { current: current.value, password: next.value }).then(function (r) {
+        if (r.ok) start(); else error.textContent = errorText(r.data);
+      });
+    } } }, [current, next, again, el('button', { text: 'Save' })]);
+    show(el('div', {}, [el('h2', { text: 'Choose your password' }), form, error]));
   }
 
   function showSetup() { credentialsForm('Create the admin account', 'Create', '/api/setup', true); }

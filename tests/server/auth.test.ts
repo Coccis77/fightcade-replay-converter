@@ -36,4 +36,14 @@ describe('auth helpers', () => {
     now = 60_001;
     expect(throttle.blocked('1.1.1.1')).toBe(false);
   });
+
+  it('forgets addresses whose attempts are older than a minute', () => {
+    let now = 0;
+    const throttle = new LoginThrottle(10, 60_000, () => now);
+    for (let i = 0; i < 500; i++) throttle.fail(`10.0.${Math.floor(i / 250)}.${i % 250}`);
+    expect(throttle.size).toBe(500);
+    now = 120_000;
+    throttle.fail('1.1.1.1');
+    expect(throttle.size).toBe(1);
+  });
 });

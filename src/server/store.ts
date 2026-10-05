@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { open, readFile, rename, stat } from 'node:fs/promises';
 import { ConvertError, ExitCode } from '../errors.js';
 
 export interface UserRecord {
@@ -58,16 +58,31 @@ function emptyData(): Data {
 
 function isData(value: unknown): value is Data {
   const d = value as Partial<Data> | null;
-  return (
-    typeof d === 'object' && d !== null && d.version === 1 &&
-    Array.isArray(d.users) && Array.isArray(d.sessions) && Array.isArray(d.conversions) && Array.isArray(d.usage)
+  if (
+    typeof d !== 'object' || d === null || d.version !== 1 ||
+    !Array.isArray(d.users) || !Array.isArray(d.sessions) || !Array.isArray(d.conversions) || !Array.isArray(d.usage)
+  ) {
+    return false;
+  }
+  // Each user must be complete, or logins would fail later in confusing ways (a file edited by hand).
+  return d.users.every(
+    (u) => typeof u?.name === 'string' && typeof u.passwordHash === 'string' && typeof u.salt === 'string' && typeof u.admin === 'boolean',
   );
 }
 
 export function defaultStoreFs(): StoreFs {
   return {
     readFile: (p) => readFile(p, 'utf8'),
-    writeFile: (p, text) => writeFile(p, text),
+    // Flushed to disk before the rename, so a power cut never leaves an empty file behind.
+    writeFile: async (p, text) => {
+      const file = await open(p, 'w');
+      try {
+        await file.writeFile(text);
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+    },
     rename: (from, to) => rename(from, to),
     version: async (p) => {
       try {

@@ -182,7 +182,7 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
       accounts.finish(id, view.state === 'done', view.state === 'failed' ? view.error : undefined).catch((err: unknown) => options.log(`Could not save the result of ${id}: ${String(err)}`));
     },
   });
-  handler = createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }), trustProxy: options.trustProxy ?? false });
+  handler = createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }), trustProxy: options.trustProxy ?? false, log: options.log });
   const port = (server.address() as AddressInfo).port;
   options.log(`Open http://${shownHost(options.host)}:${port}`);
   if (options.host === '0.0.0.0' || options.host === '::') {

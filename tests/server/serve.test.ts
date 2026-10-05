@@ -314,6 +314,7 @@ describe('serve', () => {
     const running = serve({ port: 0, host: '127.0.0.1', keepMs: 7 * DAY, signal: controller.signal, log: (m) => logs.push(m) }, deps);
     const base = (await started(logs)).replace('localhost', '127.0.0.1');
     await expect.poll(() => logs.some((l) => l.startsWith('Deleted'))).toBe(true);
+    await fetch(`${base}/api/state`); // queued behind the first cleanup's save: it has finished
     await writeFile(dataFile, '{ broken');
     files['1700000000000-2222.mp4'] = NOW - 8 * DAY;
     tick!();

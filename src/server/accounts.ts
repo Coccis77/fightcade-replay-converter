@@ -188,14 +188,15 @@ export class Accounts {
   }
 
   // Called just before a NEW conversion is queued: checks and counts the daily limit atomically.
+  // Refusals are AccountErrors (the queue undoes its reservation and the route answers with them).
   claim(id: string, name: string): Promise<boolean> {
     return this.store.update((d) => {
       const u = d.users.find((x) => same(x.name, name));
-      if (!u) return false;
+      if (!u || u.disabled) throw new AccountError(401, 'Log in first');
       const day = this.today();
       if (!u.admin) {
         const usage = d.usage.find((x) => same(x.name, u.name) && x.day === day);
-        if ((usage?.count ?? 0) >= u.limit) return false;
+        if ((usage?.count ?? 0) >= u.limit) throw new AccountError(429, `You've used your ${u.limit} replays for today`, 'Back tomorrow');
         if (usage) usage.count += 1;
         else d.usage.push({ name: u.name, day, count: 1 });
         d.usage = d.usage.filter((x) => x.day === day); // only today matters

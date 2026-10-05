@@ -16,12 +16,13 @@ const ID2 = '1790980205888-4792';
 const ID3 = '1700000000000-3333';
 const LINK = `https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`;
 let server: Server | undefined;
+const logs: string[] = [];
 
 const writesMp4: JobRunner = async (_id, output) => {
   await writeFile(output, 'MP4DATA');
 };
 
-async function start(run: JobRunner = writesMp4, existingDir?: string) {
+async function start(run: JobRunner = writesMp4, existingDir?: string, removeFile?: (p: string, jobs: Jobs, accounts: Accounts) => Promise<void>) {
   const dir = existingDir ?? (await mkdtemp(join(tmpdir(), 'fc2mp4-http-')));
   const accounts = new Accounts(new DataStore(join(dir, 'fc2mp4-data.json')));
   const jobs = new Jobs({
@@ -30,7 +31,7 @@ async function start(run: JobRunner = writesMp4, existingDir?: string) {
     run,
     onFinish: (id, view) => void accounts.finish(id, view.state === 'done', view.state === 'failed' ? view.error : undefined),
   });
-  server = createServer(createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }), trustProxy: false }));
+  server = createServer(createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: removeFile ? (p) => removeFile(p, jobs, accounts) : (p) => rm(p, { force: true }), trustProxy: false, log: (m) => logs.push(m) }));
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return { base, dir, jobs, accounts };
@@ -278,5 +279,45 @@ describe('requests', () => {
       expect((await admin.get(path)).status, path).toBe(404);
     }
     expect(await pathExists(join(dir, 'fc2mp4-data.json'))).toBe(true);
+  });
+});
+
+describe('small fixes', () => {
+  it('a delete that races a new request for the same replay keeps the new request', async () => {
+    const ctx = await start(writesMp4, undefined, async (p, jobs, accounts) => {
+      await rm(p, { force: true });
+      await jobs.submit(ID, { beforeQueue: () => accounts.claim(ID, 'Coccis') }); // arrives during the delete
+    });
+    const admin = client(ctx.base);
+    await admin.post('/api/setup', { name: 'Coccis', password: 'password1' });
+    await admin.post('/api/jobs', { url: ID });
+    await ctx.jobs.idle();
+    expect((await admin.del(`/api/conversions/${ID}`)).status).toBe(409);
+    await ctx.jobs.idle();
+    expect(await ctx.accounts.hasConversion(ID)).toBe(true);
+  });
+
+  it('answers 400 to a badly encoded username', async () => {
+    const { admin } = await withAdmin();
+    expect((await admin.patch('/api/admin/users/%E0%A4%A', { limit: 1 })).status).toBe(400);
+  });
+
+  it('never shows the data file path to visitors when it breaks while running', async () => {
+    const { base, dir } = await withAdmin();
+    await writeFile(join(dir, 'fc2mp4-data.json'), '{ broken');
+    const res = await fetch(`${base}/api/state`);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Internal error' });
+    expect(logs.some((l) => l.includes('The data file is damaged'))).toBe(true);
+  });
+
+  it('sends browser security headers', async () => {
+    const { base } = await start();
+    const page = await fetch(`${base}/`);
+    const csp = page.headers.get('content-security-policy') ?? '';
+    for (const part of ["default-src 'none'", "script-src 'unsafe-inline'", "style-src 'unsafe-inline'", "connect-src 'self'", "frame-ancestors 'none'"]) expect(csp).toContain(part);
+    expect(page.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+    expect((await fetch(`${base}/api/state`)).headers.get('x-content-type-options')).toBe('nosniff');
   });
 });

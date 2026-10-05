@@ -36,6 +36,7 @@ export function clientIp(req: IncomingMessage, trustProxy = false): string {
 
 export class LoginThrottle {
   private readonly failures = new Map<string, number[]>();
+  private lastPrune = 0;
 
   constructor(
     private readonly max = 10,
@@ -51,11 +52,24 @@ export class LoginThrottle {
     return list;
   }
 
+  get size(): number {
+    return this.failures.size;
+  }
+
+  // Addresses with no recent attempt are dropped once per window, so many visitors cannot grow the map.
+  private prune(): void {
+    const now = this.now();
+    if (now - this.lastPrune < this.windowMs) return;
+    this.lastPrune = now;
+    for (const ip of [...this.failures.keys()]) this.recent(ip);
+  }
+
   blocked(ip: string): boolean {
     return this.recent(ip).length >= this.max;
   }
 
   fail(ip: string): void {
+    this.prune();
     this.failures.set(ip, [...this.recent(ip), this.now()]);
   }
 

@@ -106,7 +106,7 @@ describe('Accounts — limits and history', () => {
     await accounts.addUser('bob', 'temporary1', 2);
     expect(await accounts.claim('1-1', 'bob')).toBe(true);
     expect(await accounts.claim('1-2', 'bob')).toBe(true);
-    expect(await accounts.claim('1-3', 'bob')).toBe(false);
+    await expect(accounts.claim('1-3', 'bob')).rejects.toMatchObject({ status: 429, message: "You've used your 2 replays for today", hint: 'Back tomorrow' });
     await accounts.finish('1-2', false, 'The replay stream never started');
     expect(await accounts.claim('1-3', 'bob')).toBe(true);
     for (let i = 0; i < 5; i++) expect(await accounts.claim(`2-${i}`, 'Coccis')).toBe(true);
@@ -190,5 +190,18 @@ describe('Accounts — review fixes', () => {
       ['1-2', 'failed'],
     ]);
     expect((await accounts.listUsers()).find((u) => u.name === 'bob')).toMatchObject({ usedToday: 1 });
+  });
+});
+
+describe('Accounts — small fixes', () => {
+  it('tells a deleted user to log in, and the limit message uses the current limit', async () => {
+    const { accounts } = harness();
+    await accounts.setup('Coccis', 'password1');
+    await accounts.addUser('bob', 'temporary1', 1);
+    await accounts.claim('1-1', 'bob');
+    await accounts.updateUser('bob', { limit: 1 });
+    await expect(accounts.claim('1-2', 'bob')).rejects.toMatchObject({ status: 429, message: "You've used your 1 replays for today" });
+    await accounts.deleteUser('bob');
+    await expect(accounts.claim('1-2', 'bob')).rejects.toMatchObject({ status: 401, message: 'Log in first' });
   });
 });
