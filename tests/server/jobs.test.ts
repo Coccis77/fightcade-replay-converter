@@ -166,6 +166,22 @@ describe('Jobs', () => {
     expect(jobs.view(A)).toBeNull();
   });
 
+  it('undoes the reservation when the limit check fails (e.g. disk full)', async () => {
+    const { jobs } = harness();
+    await expect(jobs.submit(A, { beforeQueue: async () => { throw new Error('ENOSPC'); } })).rejects.toThrow('ENOSPC');
+    expect(jobs.view(A)).toBeNull();
+    expect(await jobs.submit(A, { beforeQueue: async () => true })).toBe('queued');
+  });
+
+  it('reports replays dropped by stop() as failed, so they are refunded', async () => {
+    const finished: string[] = [];
+    const jobs = new Jobs({ outputDir: '/videos', exists: async () => false, run: () => new Promise(() => {}), onFinish: (id, v) => finished.push(`${id}:${v.state}`) });
+    await jobs.submit(A);
+    await jobs.submit(B);
+    jobs.stop();
+    expect(finished).toEqual([`${B}:failed`]);
+  });
+
   it('knows nothing about replays never submitted', () => {
     expect(harness().jobs.view(A)).toBeNull();
   });

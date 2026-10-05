@@ -21,6 +21,8 @@ export interface ServeOptions {
   fightcadeDir?: string;
   // Delete fc2mp4's MP4s older than this from the output folder (off when undefined).
   keepMs?: number;
+  // FC2MP4_TRUST_PROXY=1: trust X-Forwarded-* from any peer (Docker + Caddy).
+  trustProxy?: boolean;
   signal: AbortSignal;
   log: (msg: string) => void;
 }
@@ -161,6 +163,7 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
     });
     accounts = new Accounts(new DataStore(deps.dataFile));
     await accounts.isSetUp(); // reads the file: a damaged one stops the startup here, with its path
+    await accounts.reconcile((id) => deps.exists(join(deps.outputDir, `${id}.mp4`)));
     if (options.signal.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
   } catch (err) {
     await new Promise((resolve) => {
@@ -179,7 +182,7 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
       accounts.finish(id, view.state === 'done', view.state === 'failed' ? view.error : undefined).catch((err: unknown) => options.log(`Could not save the result of ${id}: ${String(err)}`));
     },
   });
-  handler = createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }) });
+  handler = createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }), trustProxy: options.trustProxy ?? false });
   const port = (server.address() as AddressInfo).port;
   options.log(`Open http://${shownHost(options.host)}:${port}`);
   if (options.host === '0.0.0.0' || options.host === '::') {
@@ -192,13 +195,18 @@ export async function serve(options: ServeOptions, deps: ServeDeps = defaultServ
   if (options.keepMs !== undefined) {
     const keepMs = options.keepMs;
     const sweep = async () => {
-      for (const file of await cleanOutputFolder(deps.outputDir, keepMs, (id) => jobs.isBusy(id), deps.cleanup)) {
-        options.log(`Deleted ${file.name} (${shownAge(file.ageMs)})`);
-        const id = /^(\d+-\d+)/.exec(file.name)?.[1];
-        if (id && !file.name.endsWith('.part.mp4')) {
-          await accounts.removeConversion(id);
-          jobs.forget(id);
+      try {
+        for (const file of await cleanOutputFolder(deps.outputDir, keepMs, (id) => jobs.isBusy(id), deps.cleanup)) {
+          options.log(`Deleted ${file.name} (${shownAge(file.ageMs)})`);
+          const id = /^(\d+-\d+)/.exec(file.name)?.[1];
+          if (id && !file.name.endsWith('.part.mp4')) {
+            await accounts.removeConversion(id);
+            jobs.forget(id);
+          }
         }
+      } catch (err) {
+        // An hourly cleanup must never take the server down (disk full, damaged data file).
+        options.log(`Cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
     void sweep();

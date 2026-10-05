@@ -36,6 +36,7 @@ a { color: var(--accent); }
   var me = null;
   var tracked = {};
   var MAX_POLL_FAILURES = 5;
+  var listTimer = null;
 
   function el(tag, props, children) {
     var node = document.createElement(tag);
@@ -58,7 +59,9 @@ a { color: var(--accent); }
 
   function errorText(data) { return (data.error || 'Something went wrong') + (data.hint ? ' — ' + data.hint : ''); }
 
-  function show(node) { app.className = ''; app.textContent = ''; app.appendChild(node); }
+  // Leaving the converter (logged out, password screen) stops its list refresh, or the login form
+  // would be redrawn every 5 s.
+  function show(node) { clearInterval(listTimer); app.className = ''; app.textContent = ''; app.appendChild(node); }
 
   function start() {
     api('GET', '/api/state').then(function (r) {
@@ -138,7 +141,7 @@ a { color: var(--accent); }
       table,
     ]));
     loadList();
-    setInterval(loadList, 5000);
+    listTimer = setInterval(loadList, 5000);
   }
 
   function loadList() {

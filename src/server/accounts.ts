@@ -49,11 +49,20 @@ function checkLimit(limit: number): void {
   if (!Number.isInteger(limit) || limit < 0 || limit > 1000) throw new AccountError(400, 'The daily limit must be a whole number from 0 to 1000');
 }
 
+// Checked when the user is unknown or disabled, so a wrong name takes as long as a wrong password.
+const DUMMY_SALT = '00'.repeat(16);
+const DUMMY_HASH = '00'.repeat(64);
+
 export class Accounts {
+  private readonly verify: typeof verifyPassword;
+
   constructor(
     private readonly store: DataStore,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    options: { verify?: typeof verifyPassword } = {},
+  ) {
+    this.verify = options.verify ?? verifyPassword;
+  }
 
   // Server local date: the day resets at local midnight (TZ in Docker).
   private today(): string {
@@ -85,7 +94,8 @@ export class Accounts {
     const { hash, salt } = await hashPassword(password);
     return this.store.update((d) => {
       if (d.users.some((u) => u.admin)) throw new AccountError(409, 'The admin account already exists');
-      d.users = d.users.filter((u) => !same(u.name, name));
+      // Never take over a user's name: their old sessions would become admin sessions.
+      if (d.users.some((u) => same(u.name, name))) throw new AccountError(409, 'That username is taken');
       d.users.push({ name, admin: true, passwordHash: hash, salt, mustChangePassword: false, limit: 0, disabled: false, createdAt: this.now().toISOString() });
       return this.newSession(d, name);
     });
@@ -93,7 +103,11 @@ export class Accounts {
 
   async login(name: string, password: string): Promise<string | null> {
     const user = await this.store.read((d) => d.users.find((u) => same(u.name, name)));
-    if (!user || user.disabled || !(await verifyPassword(password, user.passwordHash, user.salt))) return null;
+    if (!user || user.disabled) {
+      await this.verify(password, DUMMY_HASH, DUMMY_SALT);
+      return null;
+    }
+    if (!(await this.verify(password, user.passwordHash, user.salt))) return null;
     return this.store.update((d) => this.newSession(d, user.name));
   }
 
@@ -113,14 +127,18 @@ export class Accounts {
     });
   }
 
-  async changePassword(name: string, current: string, next: string): Promise<void> {
+  // The other sessions of this user end (a stolen cookie does not survive a password change).
+  async changePassword(name: string, current: string, next: string, keepToken?: string): Promise<void> {
     checkPassword(next);
     const user = await this.store.read((d) => d.users.find((u) => same(u.name, name)));
-    if (!user || !(await verifyPassword(current, user.passwordHash, user.salt))) throw new AccountError(403, 'The current password is wrong');
+    if (!user || !(await this.verify(current, user.passwordHash, user.salt))) throw new AccountError(403, 'The current password is wrong');
     const { hash, salt } = await hashPassword(next);
+    const keep = keepToken ? tokenHash(keepToken) : null;
     await this.store.update((d) => {
-      const u = d.users.find((x) => same(x.name, name))!;
+      const u = d.users.find((x) => same(x.name, name));
+      if (!u) throw new AccountError(404, 'No such user');
       Object.assign(u, { passwordHash: hash, salt, mustChangePassword: false });
+      d.sessions = d.sessions.filter((s) => !same(s.name, u.name) || s.tokenHash === keep);
     });
   }
 
@@ -152,7 +170,10 @@ export class Accounts {
         u.disabled = change.disabled;
         if (u.disabled) d.sessions = d.sessions.filter((s) => !same(s.name, u.name));
       }
-      if (secret) Object.assign(u, { passwordHash: secret.hash, salt: secret.salt, mustChangePassword: true });
+      if (secret) {
+        Object.assign(u, { passwordHash: secret.hash, salt: secret.salt, mustChangePassword: true });
+        d.sessions = d.sessions.filter((s) => !same(s.name, u.name));
+      }
     });
   }
 
@@ -210,6 +231,16 @@ export class Accounts {
         }
       }
     });
+  }
+
+  // At startup: replays left waiting by a crash or a stop are settled — done when the MP4 is there,
+  // otherwise failed and refunded.
+  async reconcile(exists: (id: string) => Promise<boolean>): Promise<void> {
+    const waiting = await this.store.read((d) => d.conversions.filter((c) => c.state === 'queued').map((c) => c.id));
+    if (waiting.length === 0) return;
+    const present = new Set<string>();
+    for (const id of waiting) if (await exists(id)) present.add(id);
+    for (const id of waiting) await this.finish(id, present.has(id), present.has(id) ? undefined : 'Interrupted (the server stopped)');
   }
 
   conversions(by?: string): Promise<ConversionEntry[]> {

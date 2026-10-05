@@ -11,6 +11,11 @@ describe('pages', () => {
     expect(PAGE).not.toMatch(/\b(alert|confirm|prompt)\(/);
   });
 
+  it('main page: one list refresh timer, stopped when the page leaves the converter (no wiped login form)', () => {
+    expect(PAGE).toContain('clearInterval(listTimer)');
+    expect(PAGE).toMatch(/listTimer = setInterval\(loadList, 5000\)/);
+  });
+
   it('admin page: valid script, setup, login, users and the add form', () => {
     expect(scripts(ADMIN_PAGE).length).toBe(1);
     for (const s of scripts(ADMIN_PAGE)) expect(() => new Function(s)).not.toThrow();

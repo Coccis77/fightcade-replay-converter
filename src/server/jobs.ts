@@ -54,13 +54,25 @@ export class Jobs {
     // Reserved before asking, so a second request for the same replay joins instead of asking again.
     const previous = this.views.get(id);
     this.views.set(id, { state: 'queued', position: 0 });
-    if (options.beforeQueue && !(await options.beforeQueue())) {
+    const undo = () => {
       if (previous) this.views.set(id, previous);
       else this.views.delete(id);
+    };
+    let allowed = true;
+    try {
+      if (options.beforeQueue) allowed = await options.beforeQueue();
+    } catch (err) {
+      undo(); // e.g. disk full while counting: never leave the replay stuck as "queued"
+      throw err;
+    }
+    if (!allowed) {
+      undo();
       return 'refused';
     }
     if (this.stopped) {
-      this.views.set(id, { state: 'failed', error: 'The server stopped' });
+      const failed: JobView = { state: 'failed', error: 'The server stopped' };
+      this.views.set(id, failed);
+      this.deps.onFinish?.(id, failed); // already counted: refunded
       return 'stopped';
     }
     this.queue.push(id);
@@ -83,7 +95,11 @@ export class Jobs {
   // Server stopping: queued replays are never started (the current conversion is aborted by the signal).
   stop(): void {
     this.stopped = true;
-    for (const id of this.queue.splice(0)) this.views.set(id, { state: 'failed', error: 'The server stopped' });
+    for (const id of this.queue.splice(0)) {
+      const failed: JobView = { state: 'failed', error: 'The server stopped' };
+      this.views.set(id, failed);
+      this.deps.onFinish?.(id, failed);
+    }
   }
 
   idle(): Promise<void> {

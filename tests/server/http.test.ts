@@ -21,8 +21,8 @@ const writesMp4: JobRunner = async (_id, output) => {
   await writeFile(output, 'MP4DATA');
 };
 
-async function start(run: JobRunner = writesMp4) {
-  const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-http-'));
+async function start(run: JobRunner = writesMp4, existingDir?: string) {
+  const dir = existingDir ?? (await mkdtemp(join(tmpdir(), 'fc2mp4-http-')));
   const accounts = new Accounts(new DataStore(join(dir, 'fc2mp4-data.json')));
   const jobs = new Jobs({
     outputDir: dir,
@@ -30,7 +30,7 @@ async function start(run: JobRunner = writesMp4) {
     run,
     onFinish: (id, view) => void accounts.finish(id, view.state === 'done', view.state === 'failed' ? view.error : undefined),
   });
-  server = createServer(createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }) }));
+  server = createServer(createHandler({ jobs, accounts, throttle: new LoginThrottle(), removeFile: (p) => rm(p, { force: true }), trustProxy: false }));
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return { base, dir, jobs, accounts };
@@ -124,6 +124,13 @@ describe('logins', () => {
     expect((await c.get('/api/conversions')).status).toBe(401);
   });
 
+  it('counts login attempts before checking them, so a burst cannot get past the limit', async () => {
+    const { base } = await withAdmin();
+    const c = client(base);
+    const answers = await Promise.all(Array.from({ length: 40 }, (_, i) => c.post('/api/login', { name: 'coccis', password: `burst-${i}xx` })));
+    expect(answers.filter((r) => r.status !== 429).length).toBeLessThanOrEqual(10);
+  });
+
   it('blocks password guessing after 10 failures a minute', async () => {
     const { base } = await withAdmin();
     const c = client(base);
@@ -189,6 +196,19 @@ describe('conversions', () => {
     ]);
     const mine = (await (await bob.get('/api/conversions?by=bob')).json()) as { conversions: { id: string }[] };
     expect(mine.conversions.map((c) => c.id)).toEqual([ID2]);
+  });
+
+  it('serves the shared list downloads after a restart', async () => {
+    const { admin, jobs, dir } = await withAdmin();
+    await admin.post('/api/jobs', { url: ID });
+    await jobs.idle();
+    await new Promise((resolve) => server!.close(resolve));
+    const again = await start(writesMp4, dir);
+    const relogged = client(again.base);
+    await relogged.post('/api/login', { name: 'Coccis', password: 'password1' });
+    const file = await relogged.get(`/api/jobs/${ID}/file`);
+    expect(file.status).toBe(200);
+    expect(await file.text()).toBe('MP4DATA');
   });
 
   it('lets only the admin delete a conversion (the MP4 and the entry)', async () => {

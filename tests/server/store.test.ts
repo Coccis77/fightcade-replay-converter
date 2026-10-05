@@ -24,7 +24,7 @@ function memoryFs(initial: Record<string, string> = {}) {
       files.delete(from);
       mtimes.delete(from);
     },
-    mtimeMs: async (p) => mtimes.get(p) ?? null,
+    version: async (p) => (mtimes.has(p) ? String(mtimes.get(p)) : null),
   };
   return { fs, files, log };
 }
@@ -38,7 +38,9 @@ describe('DataStore', () => {
     const store = new DataStore(FILE, fs);
     expect(await store.read((d) => d.users.length)).toBe(0);
     await store.update((d) => void d.users.push(user('bob')));
-    expect(log).toEqual([`write ${FILE}.tmp`, `rename ${FILE}.tmp -> ${FILE}`]);
+    expect(log).toHaveLength(2);
+    expect(log[0]).toMatch(/^write \/videos\/fc2mp4-data\.json\.\d+\.[0-9a-f]+\.tmp$/);
+    expect(log[1]).toBe(`rename ${log[0]!.slice('write '.length)} -> ${FILE}`);
     expect(JSON.parse(files.get(FILE)!)).toMatchObject({ version: 1, users: [{ name: 'bob' }] });
   });
 
@@ -71,5 +73,22 @@ describe('DataStore', () => {
     ).rejects.toThrow('invalid');
     expect(await store.read((d) => d.users.length)).toBe(0);
     expect(log).toEqual([]);
+  });
+
+  it('notices an outside change even when the file time did not move (coarse timestamps)', async () => {
+    const files = new Map<string, string>();
+    const inodes = new Map<string, number>();
+    let inode = 0;
+    const fs: StoreFs = {
+      readFile: async (p) => files.get(p)!,
+      writeFile: async (p, text) => void (files.set(p, text), inodes.set(p, ++inode)),
+      rename: async (from, to) => void (files.set(to, files.get(from)!), inodes.set(to, inodes.get(from)!), files.delete(from), inodes.delete(from)),
+      version: async (p) => (files.has(p) ? `${inodes.get(p)}:${files.get(p)!.length}:1000` : null), // same time, always
+    };
+    const server = new DataStore(FILE, fs);
+    await server.update((d) => void d.users.push(user('admin'), user('bob')));
+    await new DataStore(FILE, fs).update((d) => void (d.users = d.users.filter((u) => u.name !== 'admin')));
+    await server.update((d) => void d.usage.push({ name: 'bob', day: '2026-10-05', count: 1 }));
+    expect(await new DataStore(FILE, fs).read((d) => d.users.map((u) => u.name))).toEqual(['bob']);
   });
 });

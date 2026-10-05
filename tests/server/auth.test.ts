@@ -19,6 +19,14 @@ describe('auth helpers', () => {
     expect(isSecure(req('5.6.7.8', { 'x-forwarded-proto': 'https' }))).toBe(false);
   });
 
+  it('trusts X-Forwarded-* from any peer when told it runs behind a proxy (Docker + Caddy)', () => {
+    const docker = req('172.17.0.1', { 'x-forwarded-for': '9.9.9.9', 'x-forwarded-proto': 'https' });
+    expect(clientIp(docker)).toBe('172.17.0.1');
+    expect(clientIp(docker, true)).toBe('9.9.9.9');
+    expect(isSecure(docker)).toBe(false);
+    expect(isSecure(docker, true)).toBe(true);
+  });
+
   it('blocks an address after 10 failed logins in a minute', () => {
     let now = 0;
     const throttle = new LoginThrottle(10, 60_000, () => now);

@@ -51,7 +51,7 @@ async function main(): Promise<number> {
       return 0;
     }
     if (request.command === 'serve') {
-      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, keepMs: request.keepMs, signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
+      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, keepMs: request.keepMs, trustProxy: process.env.FC2MP4_TRUST_PROXY === '1', signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
       return controller.signal.aborted ? ExitCode.Interrupted : 0;
     }
     if (request.command === 'prepare') {

@@ -51,6 +51,8 @@ export interface App {
   accounts: Accounts;
   throttle: LoginThrottle;
   removeFile(path: string): Promise<void>;
+  // Trust X-Forwarded-* from any peer (only reachable through a proxy: Docker + Caddy).
+  trustProxy: boolean;
 }
 
 // The JSON body as an object, or null after answering 415 / 413 / 400 itself.
@@ -99,14 +101,15 @@ async function createJob(app: App, user: PublicUser, req: IncomingMessage, res: 
   json(res, 200, { id });
 }
 
+// Served from the folder (not the in-memory queue), so the shared list's downloads work after a restart.
 async function sendFile(jobs: Jobs, id: string, res: ServerResponse): Promise<void> {
-  if (jobs.view(id)?.state !== 'done') return json(res, 404, { error: 'Not ready' });
+  if (jobs.isBusy(id)) return json(res, 404, { error: 'Not ready' });
   const file = jobs.filePath(id);
   let size: number;
   try {
     ({ size } = await stat(file));
   } catch {
-    return json(res, 404, { error: 'The MP4 is no longer in the folder; paste the link again' });
+    return json(res, 404, { error: 'There is no MP4 for this replay in the folder; paste the link again' });
   }
   res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': size, 'Content-Disposition': `attachment; filename="${id}.mp4"` });
   createReadStream(file)
@@ -115,16 +118,17 @@ async function sendFile(jobs: Jobs, id: string, res: ServerResponse): Promise<vo
 }
 
 async function login(app: App, req: IncomingMessage, res: ServerResponse, setup: boolean): Promise<void> {
-  const ip = clientIp(req);
-  if (!setup && app.throttle.blocked(ip)) return json(res, 429, { error: 'Too many attempts', hint: 'Wait a minute and try again' });
+  const ip = clientIp(req, app.trustProxy);
+  if (!setup) {
+    if (app.throttle.blocked(ip)) return json(res, 429, { error: 'Too many attempts', hint: 'Wait a minute and try again' });
+    app.throttle.fail(ip); // counted before checking: a burst of parallel attempts cannot get past the limit
+  }
   const body = await readJson(req, res);
   if (!body) return;
   const token = setup ? await app.accounts.setup(text(body.name), text(body.password)) : await app.accounts.login(text(body.name), text(body.password));
-  if (!token) {
-    app.throttle.fail(ip);
-    return json(res, 401, { error: 'Wrong username or password' });
-  }
-  res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req)));
+  if (!token) return json(res, 401, { error: 'Wrong username or password' });
+  if (!setup) app.throttle.forgive(ip);
+  res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req, app.trustProxy)));
   json(res, 200, { ok: true });
 }
 
@@ -193,7 +197,7 @@ async function handle(app: App, req: IncomingMessage, res: ServerResponse): Prom
   if (method === 'POST' && path === '/api/password') {
     const body = await readJson(req, res);
     if (!body) return;
-    await app.accounts.changePassword(user.name, text(body.current), text(body.password));
+    await app.accounts.changePassword(user.name, text(body.current), text(body.password), readSessionCookie(req));
     return json(res, 200, { ok: true });
   }
   if (user.mustChangePassword) return json(res, 403, { error: 'Choose your password first' });

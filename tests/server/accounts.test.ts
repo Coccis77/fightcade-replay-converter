@@ -10,7 +10,7 @@ function memoryStore(): DataStore {
     readFile: async (p) => files.get(p)!,
     writeFile: async (p, t) => void (files.set(p, t), mtimes.set(p, ++clock)),
     rename: async (a, b) => void (files.set(b, files.get(a)!), mtimes.set(b, ++clock), files.delete(a), mtimes.delete(a)),
-    mtimeMs: async (p) => mtimes.get(p) ?? null,
+    version: async (p) => (mtimes.has(p) ? String(mtimes.get(p)) : null),
   };
   return new DataStore('/videos/fc2mp4-data.json', fs);
 }
@@ -74,7 +74,7 @@ describe('Accounts — users', () => {
     const token = await accounts.login('bob', 'temporary1');
     expect(await accounts.userFor(token!)).toMatchObject({ name: 'bob', admin: false, mustChangePassword: true, limit: 3, usedToday: 0 });
     await expect(accounts.changePassword('bob', 'wrong-one', 'mine-mine')).rejects.toMatchObject({ status: 403 });
-    await accounts.changePassword('bob', 'temporary1', 'mine-mine');
+    await accounts.changePassword('bob', 'temporary1', 'mine-mine', token!);
     expect(await accounts.userFor(token!)).toMatchObject({ mustChangePassword: false });
     expect(await accounts.login('bob', 'mine-mine')).not.toBeNull();
   });
@@ -144,5 +144,51 @@ describe('Accounts — limits and history', () => {
     await accounts.claim('1-1', 'bob');
     await accounts.deleteUser('bob');
     expect((await accounts.conversions()).map((c) => c.by)).toEqual(['bob']);
+  });
+});
+
+describe('Accounts — review fixes', () => {
+  it('setup refuses a name a user already has (their old sessions must not become admin)', async () => {
+    const { accounts } = harness();
+    await accounts.setup('Coccis', 'password1');
+    await accounts.addUser('bob', 'temporary1', 3);
+    await accounts.removeAdmin();
+    await expect(accounts.setup('BOB', 'password1')).rejects.toMatchObject({ status: 409, message: 'That username is taken' });
+  });
+
+  it('a password change logs out the other sessions; an admin reset logs out all of them', async () => {
+    const { accounts } = harness();
+    await accounts.setup('Coccis', 'password1');
+    await accounts.addUser('bob', 'temporary1', 3);
+    const here = (await accounts.login('bob', 'temporary1'))!;
+    const elsewhere = (await accounts.login('bob', 'temporary1'))!;
+    await accounts.changePassword('bob', 'temporary1', 'mine-mine', here);
+    expect(await accounts.userFor(here)).not.toBeNull();
+    expect(await accounts.userFor(elsewhere)).toBeNull();
+    await accounts.updateUser('bob', { password: 'reset-pass' });
+    expect(await accounts.userFor(here)).toBeNull();
+  });
+
+  it('checks a password even for an unknown user (no guessing names by timing)', async () => {
+    let checks = 0;
+    const accounts = new Accounts(memoryStore(), () => new Date('2026-10-05T10:00:00'), {
+      verify: async () => (checks++, false),
+    });
+    expect(await accounts.login('nobody', 'whatever1')).toBeNull();
+    expect(checks).toBe(1);
+  });
+
+  it('settles replays left waiting by a crash: done if the MP4 is there, otherwise failed and refunded', async () => {
+    const { accounts } = harness();
+    await accounts.setup('Coccis', 'password1');
+    await accounts.addUser('bob', 'temporary1', 3);
+    await accounts.claim('1-1', 'bob');
+    await accounts.claim('1-2', 'bob');
+    await accounts.reconcile(async (id) => id === '1-1');
+    expect((await accounts.conversions()).map((c) => [c.id, c.state]).sort()).toEqual([
+      ['1-1', 'done'],
+      ['1-2', 'failed'],
+    ]);
+    expect((await accounts.listUsers()).find((u) => u.name === 'bob')).toMatchObject({ usedToday: 1 });
   });
 });

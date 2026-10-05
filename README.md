@@ -82,10 +82,14 @@ then open `/admin` again.
 Run fc2mp4 on the server's own address only and let Caddy add HTTPS:
 
 ```bash
-docker run -d --restart unless-stopped -p 127.0.0.1:8080:8080 -e TZ=Europe/Paris \
+docker run -d --restart unless-stopped -p 127.0.0.1:8080:8080 -e TZ=Europe/Paris -e FC2MP4_TRUST_PROXY=1 \
   -v /srv/fightcade:/fightcade:ro -v /srv/videos:/videos \
   ghcr.io/coccis77/fc2mp4 serve --keep 7d
 ```
+
+`FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through Caddy, so it uses the visitor's real
+address (login limit) and knows the connection is HTTPS (secure cookie). Only set it when the port is
+published on `127.0.0.1` as above.
 
 `/etc/caddy/Caddyfile`:
 

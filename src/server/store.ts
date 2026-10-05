@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { ConvertError, ExitCode } from '../errors.js';
 
@@ -47,7 +48,8 @@ export interface StoreFs {
   readFile(p: string): Promise<string>;
   writeFile(p: string, text: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
-  mtimeMs(p: string): Promise<number | null>;
+  // Changes whenever the file is replaced: inode, size and time (some mounts only keep coarse times).
+  version(p: string): Promise<string | null>;
 }
 
 function emptyData(): Data {
@@ -67,9 +69,10 @@ export function defaultStoreFs(): StoreFs {
     readFile: (p) => readFile(p, 'utf8'),
     writeFile: (p, text) => writeFile(p, text),
     rename: (from, to) => rename(from, to),
-    mtimeMs: async (p) => {
+    version: async (p) => {
       try {
-        return (await stat(p)).mtimeMs;
+        const s = await stat(p);
+        return `${s.ino}:${s.size}:${s.mtimeMs}`;
       } catch {
         return null;
       }
@@ -82,7 +85,7 @@ export function defaultStoreFs(): StoreFs {
 // written to <file>.tmp then renamed, so a crash never leaves a half-written file.
 export class DataStore {
   private data: Data = emptyData();
-  private mtime: number | null = null;
+  private version: string | null = null;
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -102,21 +105,22 @@ export class DataStore {
       await this.refresh();
       const draft = structuredClone(this.data);
       const result = fn(draft); // a throw leaves this.data and the file untouched
-      const tmp = `${this.path}.tmp`;
+      // A temp name of our own: serve and reset-admin never write the same temp file.
+      const tmp = `${this.path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
       await this.fs.writeFile(tmp, `${JSON.stringify(draft, null, 2)}\n`);
       await this.fs.rename(tmp, this.path);
       this.data = draft;
-      this.mtime = await this.fs.mtimeMs(this.path);
+      this.version = await this.fs.version(this.path);
       return result;
     });
   }
 
   private async refresh(): Promise<void> {
-    const mtime = await this.fs.mtimeMs(this.path);
-    if (mtime === this.mtime) return;
-    if (mtime === null) {
+    const version = await this.fs.version(this.path);
+    if (version === this.version) return;
+    if (version === null) {
       this.data = emptyData();
-      this.mtime = null;
+      this.version = null;
       return;
     }
     let parsed: unknown;
@@ -129,7 +133,7 @@ export class DataStore {
       throw new ConvertError(ExitCode.Preflight, `The data file is damaged: ${this.path}`, 'Restore a backup, or move it away to start fresh (users and history would be lost)');
     }
     this.data = parsed;
-    this.mtime = mtime;
+    this.version = version;
   }
 
   private enqueue<T>(job: () => Promise<T>): Promise<T> {

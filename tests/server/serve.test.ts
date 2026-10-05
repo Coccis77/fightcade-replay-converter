@@ -296,6 +296,32 @@ describe('serve', () => {
     controller.abort();
     await running;
   });
+
+  it('keeps running when the hourly cleanup hits a store error', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-data-'));
+    const dataFile = join(dir, 'fc2mp4-data.json');
+    const DAY = 24 * 60 * 60_000;
+    const NOW = Date.now();
+    const files: Record<string, number> = { '1700000000000-1111.mp4': NOW - 8 * DAY };
+    let tick: (() => void) | undefined;
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      dataFile,
+      cleanup: { list: async () => Object.keys(files), mtimeMs: async () => NOW - 8 * DAY, remove: async (p) => void delete files[p.split('/').at(-1)!], now: () => NOW },
+      schedule: (fn) => ((tick = fn), () => (tick = undefined)),
+    });
+    const running = serve({ port: 0, host: '127.0.0.1', keepMs: 7 * DAY, signal: controller.signal, log: (m) => logs.push(m) }, deps);
+    const base = (await started(logs)).replace('localhost', '127.0.0.1');
+    await expect.poll(() => logs.some((l) => l.startsWith('Deleted'))).toBe(true);
+    await writeFile(dataFile, '{ broken');
+    files['1700000000000-2222.mp4'] = NOW - 8 * DAY;
+    tick!();
+    await expect.poll(() => logs.some((l) => l.startsWith('Cleanup failed'))).toBe(true);
+    expect((await fetch(`${base}/`)).status).toBe(200);
+    controller.abort();
+    await running;
+  });
 });
 
 describe('externalAddresses', () => {

@@ -23,13 +23,14 @@ export function clearSessionCookie(): string {
 // X-Forwarded-* are only trusted from a proxy on this machine (Caddy in front of fc2mp4).
 const fromLocalProxy = (req: IncomingMessage) => LOOPBACK.has(req.socket.remoteAddress ?? '');
 
-export function isSecure(req: IncomingMessage): boolean {
-  return fromLocalProxy(req) && req.headers['x-forwarded-proto'] === 'https';
+// trustProxy: fc2mp4 only reachable through a proxy (Docker + Caddy, where Caddy is not on loopback).
+export function isSecure(req: IncomingMessage, trustProxy = false): boolean {
+  return (trustProxy || fromLocalProxy(req)) && req.headers['x-forwarded-proto'] === 'https';
 }
 
-export function clientIp(req: IncomingMessage): string {
+export function clientIp(req: IncomingMessage, trustProxy = false): string {
   const forwarded = req.headers['x-forwarded-for'];
-  if (fromLocalProxy(req) && typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0]!.trim();
+  if ((trustProxy || fromLocalProxy(req)) && typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0]!.trim();
   return req.socket.remoteAddress ?? 'unknown';
 }
 
@@ -56,5 +57,13 @@ export class LoginThrottle {
 
   fail(ip: string): void {
     this.failures.set(ip, [...this.recent(ip), this.now()]);
+  }
+
+  // A successful login gives back the attempt counted before checking it.
+  forgive(ip: string): void {
+    const list = this.recent(ip);
+    list.pop();
+    if (list.length > 0) this.failures.set(ip, list);
+    else this.failures.delete(ip);
   }
 }
