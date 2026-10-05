@@ -5,6 +5,9 @@ import { ConvertError } from '../errors.js';
 import { parseReplayRef } from '../replayRef.js';
 import type { Jobs } from './jobs.js';
 import { PAGE } from './page.js';
+import { AccountError, DEFAULT_LIMIT, type Accounts, type PublicUser } from './accounts.js';
+import { ADMIN_PAGE } from './adminPage.js';
+import { clearSessionCookie, clientIp, isSecure, readSessionCookie, sessionCookie, type LoginThrottle } from './auth.js';
 
 const MAX_BODY = 4096;
 const QUARK_ID = /^\d+-\d+$/;
@@ -40,32 +43,59 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-async function createJob(jobs: Jobs, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  // JSON only: a form or text/plain request from another website (no CORS preflight) cannot queue jobs.
+const CONVERSION_ROUTE = /^\/api\/conversions\/([^/]+)$/;
+const USER_ROUTE = /^\/api\/admin\/users\/([^/]+)$/;
+
+export interface App {
+  jobs: Jobs;
+  accounts: Accounts;
+  throttle: LoginThrottle;
+  removeFile(path: string): Promise<void>;
+}
+
+// The JSON body as an object, or null after answering 415 / 413 / 400 itself.
+async function readJson(req: IncomingMessage, res: ServerResponse): Promise<Record<string, unknown> | null> {
+  // JSON only: a form or text/plain request from another website (no CORS preflight) is refused.
   const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
-  if (type !== 'application/json') return json(res, 415, { error: 'Send JSON (Content-Type: application/json)' });
+  if (type !== 'application/json') {
+    json(res, 415, { error: 'Send JSON (Content-Type: application/json)' });
+    return null;
+  }
   const body = await readBody(req);
   if (body === null) {
     // Answer now and close the connection instead of reading the rest.
     res.setHeader('Connection', 'close');
     res.on('finish', () => req.destroy());
-    return json(res, 413, { error: 'Request too large' });
+    json(res, 413, { error: 'Request too large' });
+    return null;
   }
-  let url: unknown;
   try {
-    url = (JSON.parse(body) as { url?: unknown }).url;
+    const value: unknown = JSON.parse(body);
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
   } catch {
-    url = undefined;
+    // answered below
   }
-  if (typeof url !== 'string') return json(res, 400, { error: 'Send {"url": "<Fightcade replay link>"}' });
+  json(res, 400, { error: 'Send a JSON object' });
+  return null;
+}
+
+const text = (v: unknown) => (typeof v === 'string' ? v : '');
+
+async function createJob(app: App, user: PublicUser, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJson(req, res);
+  if (!body) return;
+  if (typeof body.url !== 'string') return json(res, 400, { error: 'Send {"url": "<Fightcade replay link>"}' });
   let id: string;
   try {
-    id = parseReplayRef(url).quarkId;
+    id = parseReplayRef(body.url).quarkId;
   } catch (err) {
     if (err instanceof ConvertError) return json(res, 400, { error: err.message, hint: err.hint });
     throw err;
   }
-  await jobs.submit(id);
+  const outcome = await app.jobs.submit(id, { beforeQueue: () => app.accounts.claim(id, user.name) });
+  if (outcome === 'refused') return json(res, 429, { error: `You've used your ${user.limit} replays for today`, hint: 'Back tomorrow' });
+  if (outcome === 'stopped') return json(res, 503, { error: 'The server is stopping' });
+  if (outcome === 'done') await app.accounts.recordExisting(id, user.name);
   json(res, 200, { id });
 }
 
@@ -84,26 +114,118 @@ async function sendFile(jobs: Jobs, id: string, res: ServerResponse): Promise<vo
     .pipe(res);
 }
 
-async function handle(jobs: Jobs, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const path = (req.url ?? '/').split('?')[0]!;
-  if (req.method === 'GET' && path === '/') return send(res, 200, 'text/html; charset=utf-8', PAGE);
-  if (req.method === 'POST' && path === '/api/jobs') return createJob(jobs, req, res);
-  const route = JOB_ROUTE.exec(path);
-  // Only a quark ID ever reaches the file system (as <outputDir>/<id>.mp4).
-  if (req.method === 'GET' && route && QUARK_ID.test(route[1]!)) {
-    const id = route[1]!;
-    if (route[2]) return sendFile(jobs, id, res);
-    const view = jobs.view(id);
-    return view ? json(res, 200, view) : json(res, 404, { error: 'Unknown replay' });
+async function login(app: App, req: IncomingMessage, res: ServerResponse, setup: boolean): Promise<void> {
+  const ip = clientIp(req);
+  if (!setup && app.throttle.blocked(ip)) return json(res, 429, { error: 'Too many attempts', hint: 'Wait a minute and try again' });
+  const body = await readJson(req, res);
+  if (!body) return;
+  const token = setup ? await app.accounts.setup(text(body.name), text(body.password)) : await app.accounts.login(text(body.name), text(body.password));
+  if (!token) {
+    app.throttle.fail(ip);
+    return json(res, 401, { error: 'Wrong username or password' });
+  }
+  res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req)));
+  json(res, 200, { ok: true });
+}
+
+async function conversions(app: App, url: URL, res: ServerResponse): Promise<void> {
+  const by = url.searchParams.get('by') || undefined;
+  const list = await app.accounts.conversions(by);
+  // Live state from the queue when the replay is waiting or converting.
+  json(res, 200, { conversions: list.map((c) => ({ ...c, state: app.jobs.isBusy(c.id) ? app.jobs.view(c.id)!.state : c.state })) });
+}
+
+async function deleteConversion(app: App, id: string, res: ServerResponse): Promise<void> {
+  if (app.jobs.isBusy(id)) return json(res, 409, { error: 'Wait until it has finished' });
+  if (!(await app.accounts.hasConversion(id))) return json(res, 404, { error: 'Unknown replay' });
+  await app.removeFile(app.jobs.filePath(id));
+  await app.accounts.removeConversion(id);
+  app.jobs.forget(id);
+  json(res, 200, { ok: true });
+}
+
+async function adminUsers(app: App, method: string, name: string | null, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (name === null && method === 'GET') return json(res, 200, { users: await app.accounts.listUsers() });
+  if (name === null && method === 'POST') {
+    const body = await readJson(req, res);
+    if (!body) return;
+    await app.accounts.addUser(text(body.name), text(body.password), body.limit === undefined ? DEFAULT_LIMIT : Number(body.limit));
+    return json(res, 200, { ok: true });
+  }
+  if (name !== null && method === 'PATCH') {
+    const body = await readJson(req, res);
+    if (!body) return;
+    await app.accounts.updateUser(name, {
+      limit: body.limit === undefined ? undefined : Number(body.limit),
+      disabled: typeof body.disabled === 'boolean' ? body.disabled : undefined,
+      password: typeof body.password === 'string' ? body.password : undefined,
+    });
+    return json(res, 200, { ok: true });
+  }
+  if (name !== null && method === 'DELETE') {
+    await app.accounts.deleteUser(name);
+    return json(res, 200, { ok: true });
   }
   json(res, 404, { error: 'Not found' });
 }
 
-export function createHandler(jobs: Jobs): (req: IncomingMessage, res: ServerResponse) => void {
+async function handle(app: App, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const path = url.pathname;
+  const method = req.method ?? 'GET';
+  if (method === 'GET' && path === '/') return send(res, 200, 'text/html; charset=utf-8', PAGE);
+  if (method === 'GET' && path === '/admin') return send(res, 200, 'text/html; charset=utf-8', ADMIN_PAGE);
+
+  const user = await app.accounts.userFor(readSessionCookie(req));
+  if (method === 'GET' && path === '/api/state') return json(res, 200, { setUp: await app.accounts.isSetUp(), user });
+  if (method === 'POST' && path === '/api/setup') return login(app, req, res, true);
+  if (method === 'POST' && path === '/api/login') return login(app, req, res, false);
+
+  if (!path.startsWith('/api/')) return json(res, 404, { error: 'Not found' });
+  if (!user) return json(res, 401, { error: 'Log in first' });
+
+  if (method === 'POST' && path === '/api/logout') {
+    const token = readSessionCookie(req);
+    if (token) await app.accounts.logout(token);
+    res.setHeader('Set-Cookie', clearSessionCookie());
+    return json(res, 200, { ok: true });
+  }
+  if (method === 'POST' && path === '/api/password') {
+    const body = await readJson(req, res);
+    if (!body) return;
+    await app.accounts.changePassword(user.name, text(body.current), text(body.password));
+    return json(res, 200, { ok: true });
+  }
+  if (user.mustChangePassword) return json(res, 403, { error: 'Choose your password first' });
+
+  if (method === 'POST' && path === '/api/jobs') return createJob(app, user, req, res);
+  const job = JOB_ROUTE.exec(path);
+  // Only a quark ID ever reaches the file system (as <outputDir>/<id>.mp4).
+  if (method === 'GET' && job && QUARK_ID.test(job[1]!)) {
+    const id = job[1]!;
+    if (job[2]) return sendFile(app.jobs, id, res);
+    const view = app.jobs.view(id);
+    return view ? json(res, 200, view) : json(res, 404, { error: 'Unknown replay' });
+  }
+  if (method === 'GET' && path === '/api/conversions') return conversions(app, url, res);
+
+  const conversion = CONVERSION_ROUTE.exec(path);
+  const userRoute = USER_ROUTE.exec(path);
+  const isAdminRoute = (method === 'DELETE' && conversion !== null) || path === '/api/admin/users' || userRoute !== null;
+  if (isAdminRoute && !user.admin) return json(res, 403, { error: 'For the admin only' });
+  if (method === 'DELETE' && conversion && QUARK_ID.test(conversion[1]!)) return deleteConversion(app, conversion[1]!, res);
+  if (path === '/api/admin/users') return adminUsers(app, method, null, req, res);
+  if (userRoute) return adminUsers(app, method, decodeURIComponent(userRoute[1]!), req, res);
+  json(res, 404, { error: 'Not found' });
+}
+
+export function createHandler(app: App): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
-    handle(jobs, req, res).catch(() => {
-      if (res.headersSent) res.destroy();
-      else json(res, 500, { error: 'Internal error' });
+    handle(app, req, res).catch((err: unknown) => {
+      if (res.headersSent) return res.destroy();
+      if (err instanceof AccountError) return json(res, err.status, { error: err.message, hint: err.hint });
+      if (err instanceof ConvertError) return json(res, 500, { error: err.message, hint: err.hint });
+      json(res, 500, { error: 'Internal error' });
     });
   };
 }
