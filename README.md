@@ -77,27 +77,68 @@ in Docker add `-e TZ=Europe/Paris` (your time zone).
 Lost the admin password? `fc2mp4 reset-admin` (Docker: `docker exec <container> fc2mp4 reset-admin`),
 then open `/admin` again.
 
-### On a VPS, with HTTPS (Caddy)
+### On a VPS, with HTTPS
 
-Run fc2mp4 on the server's own address only and let Caddy add HTTPS:
+Run fc2mp4 on the server's own address only (`127.0.0.1`) and put a web server in front of it for HTTPS
+(Caddy, nginx, Apache, Traefik…):
 
 ```bash
-docker run -d --restart unless-stopped -p 127.0.0.1:8080:8080 -e TZ=Europe/Paris -e FC2MP4_TRUST_PROXY=1 \
-  -v /srv/fightcade:/fightcade:ro -v /srv/videos:/videos \
+mkdir -p /srv/fc2mp4/fightcade /srv/fc2mp4/videos && sudo chown 1000:1000 /srv/fc2mp4/videos
+docker run -d --name fc2mp4 --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 -e TZ=Europe/Paris -e FC2MP4_TRUST_PROXY=1 \
+  -v /srv/fc2mp4/fightcade:/fightcade:ro -v /srv/fc2mp4/videos:/videos \
   ghcr.io/coccis77/fc2mp4 serve --keep 7d
 ```
 
-`FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through Caddy, so it uses the visitor's real
-address (login limit) and knows the connection is HTTPS (secure cookie). Only set it when the port is
-published on `127.0.0.1` as above.
+`/srv/fc2mp4/fightcade` holds a copy of Fightcade's `emulator/fbneo` folder: its DLLs (`ggponet.dll`…) and
+`ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip`. Set `TZ` to your time zone (the daily limits reset at midnight).
 
-`/etc/caddy/Caddyfile`:
+`FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through the web server in front, so it uses
+the visitor's address for the login limit and knows when the connection is HTTPS (secure cookie). Only set
+it when the port is published on `127.0.0.1` as above.
+
+What the web server in front must do:
+
+- forward everything to `http://127.0.0.1:8080`, keeping the `Host` header;
+- set `X-Forwarded-Proto` (`https`);
+- set `X-Forwarded-For` to **the visitor's address only** — never append it to what the visitor sent
+  (fc2mp4 reads the first address, so an appended list would let anyone fake theirs and bypass the login limit);
+- ideally stream responses instead of buffering them (MP4 downloads of 60 MB and more).
+
+**Caddy** (`/etc/caddy/Caddyfile`; HTTPS certificates are automatic, and Caddy already replaces
+`X-Forwarded-For` with the visitor's address):
 
 ```
 replays.example.com {
   reverse_proxy 127.0.0.1:8080
 }
 ```
+
+**nginx + certbot** (`/etc/nginx/sites-available/fc2mp4`, linked in `sites-enabled`):
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name replays.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;    # not $proxy_add_x_forwarded_for
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        client_max_body_size 16k;
+    }
+}
+```
+
+then `sudo nginx -t && sudo systemctl reload nginx` and `sudo certbot --nginx -d replays.example.com --redirect`
+(certbot adds the HTTPS part and renews the certificate).
+
+Behind another web server, apply the same four rules. Without a domain name, use an SSH tunnel instead of
+exposing the page: `ssh -L 8080:127.0.0.1:8080 you@server`, then `http://localhost:8080`.
 
 ## How it works
 
