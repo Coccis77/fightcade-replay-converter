@@ -67,7 +67,7 @@ a { color: var(--accent); }
     api('GET', '/api/state').then(function (r) {
       if (r.status === 503) { setTimeout(start, 2000); return; }
       var s = r.data;
-      if (!s.setUp) return show(el('p', { class: 'muted', text: 'Not set up yet. The admin creates the first account at /admin.' }));
+      if (!s.setUp) return show(el('p', { class: 'muted', text: 'This page is not ready yet.' }));
       if (!s.user) return showLogin();
       me = s.user;
       if (me.mustChangePassword) return showChangePassword();

@@ -17,7 +17,7 @@ Target: a small public deployment on a VPS behind Caddy (HTTPS), for very few us
 
 ### Success criteria
 
-1. On a fresh server, `/` says "Not set up yet"; `/admin` creates the admin account once, then only
+1. On a fresh server, `/` says "This page is not ready yet" (no hint about `/admin`); `/admin` creates the admin account once, then only
    offers the admin login.
 2. The admin adds users (username, temporary password, daily limit, default 3), changes limits,
    resets passwords, disables and deletes users.
@@ -30,7 +30,7 @@ Target: a small public deployment on a VPS behind Caddy (HTTPS), for very few us
 
 ## 2. Pages
 
-- **`/`** — not set up: "Not set up yet". Logged out: login form. Temporary password: "Choose your
+- **`/`** — not set up: "This page is not ready yet" (no mention of `/admin`). Logged out: login form. Temporary password: "Choose your
   password" (new password twice, ≥ 8 characters). Logged in: the converter (link box, Convert, the
   live status of the replays the user submitted in this tab, as today), "N of M replays left today"
   (admin: no counter), the shared list, and Log out.

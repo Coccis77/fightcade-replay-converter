@@ -7,7 +7,8 @@ const scripts = (html: string) => [...html.matchAll(/<script>([\s\S]*?)<\/script
 describe('pages', () => {
   it('main page: valid script, the texts of every state, no browser dialogs', () => {
     for (const s of scripts(PAGE)) expect(() => new Function(s)).not.toThrow();
-    for (const t of ['Not set up yet', 'Log in', 'Choose your password', 'replays left today', 'Uploaded by', 'Everyone', 'Log out', 'Download', 'Confirm?']) expect(PAGE).toContain(t);
+    expect(PAGE).not.toContain('/admin'); // the public page never points to the admin area
+    for (const t of ['This page is not ready yet', 'Log in', 'Choose your password', 'replays left today', 'Uploaded by', 'Everyone', 'Log out', 'Download', 'Confirm?']) expect(PAGE).toContain(t);
     expect(PAGE).not.toMatch(/\b(alert|confirm|prompt)\(/);
   });
 
