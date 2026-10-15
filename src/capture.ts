@@ -142,7 +142,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
         throw new ConvertError(ExitCode.Recording, `The capture stalled: no new frame for ${TIMEOUTS.stallMs / 1000} s`, 'The emulator may be stuck; try again (use -v for details)');
       }
       if (!started && elapsed >= TIMEOUTS.firstFrameMs) {
-        throw new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the quark ID and that Fightcade replay servers are reachable');
+        throw new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the link (a quark ID alone means a 3rd Strike replay) and that Fightcade replay servers are reachable');
       }
       if (elapsed >= opts.maxDurationMs) {
         // Nothing to keep yet: say so instead of letting ffmpeg fail on an empty video.

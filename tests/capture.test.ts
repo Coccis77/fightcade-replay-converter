@@ -193,6 +193,15 @@ describe('capture', () => {
     });
   });
 
+  it('asks for the full link when the stream never starts (a bare ID is 3rd Strike)', async () => {
+    const { deps } = harness({});
+    await expect(capture(deps, base)).rejects.toMatchObject({
+      exitCode: ExitCode.Recording,
+      message: 'The replay stream never started',
+      hint: 'Check the link (a quark ID alone means a 3rd Strike replay) and that Fightcade replay servers are reachable',
+    });
+  });
+
   it('rejects a wrong frame format', async () => {
     const { deps } = harness({ infoAt: 1_000, info: INFO.replace('bpp=4', 'bpp=2') });
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording, message: expect.stringContaining('bpp 2') });
