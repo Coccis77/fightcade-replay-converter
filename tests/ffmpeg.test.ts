@@ -7,24 +7,32 @@ import { describe, expect, it } from 'vitest';
 import { checkInfo, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
+import { GAMES } from '../src/constants.js';
+
+const SF3 = GAMES.sfiii3nr1.format;
 
 const exec = promisify(execFile);
 const hasFfmpeg = await exec('ffmpeg', ['-version']).then(() => true, () => false);
 
 describe('ffmpeg arguments', () => {
   it('encodes raw BGRA frames to 1440x1080 H.264 without audio', () => {
-    expect(videoEncodeArgs({ input: '/t/video.fifo', output: '/t/video.mp4', scale: 'sharp' })).toEqual([
+    expect(videoEncodeArgs({ input: '/t/video.fifo', output: '/t/video.mp4', scale: 'sharp', format: SF3 })).toEqual([
       '-hide_banner', '-nostats', '-progress', 'pipe:1', '-y',
       '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-s', '384x224', '-r', '59.59', '-i', '/t/video.fifo',
       '-vf', 'format=yuv444p,scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an',
       '/t/video.mp4',
     ]);
-    expect(videoEncodeArgs({ input: 'i', output: 'o', scale: 'smooth' })).toContain('format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1');
+    expect(videoEncodeArgs({ input: 'i', output: 'o', scale: 'smooth', format: SF3 })).toContain('format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1');
+  });
+
+  it('reads raw frames at the game size and rate', () => {
+    const args = videoEncodeArgs({ input: 'i', output: 'o', scale: 'sharp', format: GAMES.garou.format });
+    expect(args.slice(args.indexOf('-s'), args.indexOf('-s') + 4)).toEqual(['-s', '320x224', '-r', '59.18']);
   });
 
   it('muxes the video with the raw audio', () => {
-    expect(muxArgs({ video: '/t/video.mp4', audio: '/t/audio.raw', output: '/o/x.part.mp4' })).toEqual([
+    expect(muxArgs({ video: '/t/video.mp4', audio: '/t/audio.raw', output: '/o/x.part.mp4', sampleRate: 44100 })).toEqual([
       '-hide_banner', '-nostats', '-y',
       '-i', '/t/video.mp4',
       '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', '/t/audio.raw',
@@ -57,12 +65,17 @@ describe('emulator info', () => {
   it('parses and accepts the expected format', () => {
     const info = parseInfo(good);
     expect(info).toEqual({ width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 });
-    expect(() => checkInfo(info)).not.toThrow();
+    expect(() => checkInfo(info, SF3)).not.toThrow();
+    expect(() => checkInfo(parseInfo('width=320\nheight=224\nbpp=4\nfps_x100=5918\nsample_rate=44100\n'), GAMES.garou.format)).not.toThrow();
   });
   it('rejects another format with a Recording error describing both', () => {
-    expect(thrown(() => checkInfo(parseInfo(good.replace('bpp=4', 'bpp=2'))))).toMatchObject({
+    expect(thrown(() => checkInfo(parseInfo(good.replace('bpp=4', 'bpp=2')), SF3))).toMatchObject({
       exitCode: ExitCode.Recording,
       message: expect.stringContaining('bpp 2'),
+    });
+    expect(thrown(() => checkInfo(parseInfo(good), GAMES.garou.format))).toMatchObject({
+      exitCode: ExitCode.Recording,
+      message: expect.stringContaining('expected 320x224'),
     });
   });
   it('rejects an incomplete info file', () => {
@@ -84,8 +97,8 @@ describe.skipIf(!hasFfmpeg)('encode + mux (real ffmpeg)', () => {
     const raw = await rawInputs(dir);
     const videoMp4 = join(dir, 'video.mp4');
     const output = join(dir, 'out.mp4');
-    await runFfmpeg(videoEncodeArgs({ input: raw.video, output: videoMp4, scale: 'sharp' }));
-    await mux({ video: videoMp4, audio: raw.audio, output });
+    await runFfmpeg(videoEncodeArgs({ input: raw.video, output: videoMp4, scale: 'sharp', format: SF3 }));
+    await mux({ video: videoMp4, audio: raw.audio, output, sampleRate: 44100 });
 
     const { stdout } = await exec('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,duration', '-of', 'json', output]);
     const streams = (JSON.parse(stdout) as { streams: Record<string, string | number>[] }).streams;
@@ -101,7 +114,7 @@ describe.skipIf(!hasFfmpeg)('encode + mux (real ffmpeg)', () => {
     const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-ff-'));
     const output = join(dir, 'out.mp4');
     await writeFile(output, 'OLD VIDEO');
-    await expect(mux({ video: join(dir, 'missing.mp4'), audio: join(dir, 'missing.raw'), output })).rejects.toMatchObject({ exitCode: ExitCode.Encode });
+    await expect(mux({ video: join(dir, 'missing.mp4'), audio: join(dir, 'missing.raw'), output, sampleRate: 44100 })).rejects.toMatchObject({ exitCode: ExitCode.Encode });
     expect(await readFile(output, 'utf8')).toBe('OLD VIDEO');
     expect(await pathExists(partPath(output))).toBe(false);
   }, 60_000);

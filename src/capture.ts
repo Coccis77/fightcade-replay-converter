@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Writable } from 'node:stream';
-import { EMULATOR_EXE, TIMEOUTS } from './constants.js';
+import { EMULATOR_EXE, TIMEOUTS, type FrameFormat } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run } from './exec.js';
 import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
@@ -34,6 +34,7 @@ export interface CaptureDeps {
 export interface CaptureOptions {
   dir: string;
   scale: ScaleMode;
+  format: FrameFormat;
   maxDurationMs: number;
   signal?: AbortSignal;
   onProgress?: (frames: number, elapsedMs: number) => void;
@@ -96,7 +97,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
   const transport = await deps.openTransport(opts.dir);
   let frames = 0;
   const attach = transport.encoderInput === 'pipe:0' ? (stdin: Writable) => transport.attach(stdin) : null;
-  const encoder = deps.startEncoder(videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale }), (n) => (frames = n), attach);
+  const encoder = deps.startEncoder(videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format: opts.format }), (n) => (frames = n), attach);
   const emulator = deps.startEmulator({
     FC2MP4_VIDEO: transport.emulatorPath,
     FC2MP4_AUDIO: deps.toEmulatorPath(audio),
@@ -115,14 +116,14 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
       if (!started) {
         const text = await deps.readInfo(info);
         if (text !== null) {
-          checkInfo(parseInfo(text));
+          checkInfo(parseInfo(text), opts.format);
           started = true;
           lastProgressAt = deps.now();
         }
       }
       if (emulator.exited) {
         if (!started) {
-          throw new ConvertError(ExitCode.Emulator, 'The emulator exited before the replay started', 'Check the quark ID; the replay may no longer exist');
+          throw new ConvertError(ExitCode.Emulator, 'The emulator exited before the replay started', 'Check the link; a quark ID alone means a 3rd Strike replay. The replay may also no longer exist');
         }
         const code = await emulator.wait();
         if (code !== 0) {

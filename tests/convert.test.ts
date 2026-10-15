@@ -47,14 +47,14 @@ function harness(over: Partial<ConvertDeps> = {}) {
       return '/tmp/run';
     },
     capture: async (_install, ref, _ffmpeg, opts) => {
-      calls.push(`capture:${ref.game.id}:${ref.quarkId}:${opts.dir}`);
+      calls.push(`capture:${ref.game.id}:${ref.quarkId}:${opts.dir}:${opts.format.width}`);
       return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, endReason: 'ended' };
     },
     mkdir: async (dir) => {
       calls.push(`mkdir:${dir}`);
     },
-    mux: async ({ output }) => {
-      calls.push(`mux:${output}`);
+    mux: async ({ output, sampleRate }) => {
+      calls.push(`mux:${output}:${sampleRate}`);
     },
     removeDir: async (dir) => {
       calls.push(`rmdir:${dir}`);
@@ -68,17 +68,30 @@ describe('convert', () => {
   it('runs the pipeline in order', async () => {
     const { deps, calls } = harness();
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
-    expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
+    expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`,
-      'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
+      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run:384`,
+      'mkdir:/out', `mux:/out/${ID}.mp4:44100`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
 
   it('captures the game from the link', async () => {
     const { deps, calls } = harness();
     await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps);
-    expect(calls).toContain(`capture:garou:${ID}:/tmp/run`);
+    expect(calls).toContain(`capture:garou:${ID}:/tmp/run:320`);
+  });
+
+  it('reports progress and length in seconds at the game frame rate', async () => {
+    const events: unknown[] = [];
+    const { deps } = harness({
+      capture: async (_install, _ref, _ffmpeg, opts) => {
+        opts.onProgress?.(35508, 60_000); // 600 s of Garou at 59.18 fps
+        return { video: 'v', audio: 'a', frames: 35508, endReason: 'ended' };
+      },
+    });
+    const result = await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, { ...baseOptions, onProgress: (e) => events.push(e) }, deps);
+    expect(events).toContainEqual({ phase: 'capturing', frames: 35508, seconds: 600, elapsedMs: 60_000 });
+    expect(result.seconds).toBe(600);
   });
 
   it('fails before capturing when the output folder is not writable', async () => {

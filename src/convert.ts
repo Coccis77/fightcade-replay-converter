@@ -23,7 +23,7 @@ export type ProgressEvent =
   | { phase: 'preparing' }
   | { phase: 'setting-up-wine' }
   | { phase: 'connecting' }
-  | { phase: 'capturing'; frames: number; elapsedMs: number }
+  | { phase: 'capturing'; frames: number; seconds: number; elapsedMs: number }
   | { phase: 'finalizing' };
 
 export interface ConvertOptions {
@@ -40,6 +40,7 @@ export interface ConvertOptions {
 export interface ConvertResult {
   output: string;
   frames: number;
+  seconds: number;
   endReason: CaptureResult['endReason'];
 }
 
@@ -57,7 +58,7 @@ export interface ConvertDeps {
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, ref: ReplayRef, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
-  mux(args: { video: string; audio: string; output: string }, ffmpeg: string): Promise<void>;
+  mux(args: { video: string; audio: string; output: string; sampleRate: number }, ffmpeg: string): Promise<void>;
   removeDir(dir: string): Promise<void>;
 }
 
@@ -143,19 +144,22 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });
+    const { format } = ref.game;
+    const seconds = (frames: number) => (frames * 100) / format.fpsX100;
     const captured = await deps.capture(install, ref, ffmpeg, {
       dir,
       scale: options.scale,
+      format,
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,
-      onProgress: (frames, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, elapsedMs }),
+      onProgress: (frames, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds: seconds(frames), elapsedMs }),
     });
     if (captured.endReason === 'max-duration') log('Warning: reached --max-duration; the video may be cut short');
 
     options.onProgress?.({ phase: 'finalizing' });
     await deps.mkdir(dirname(output));
-    await deps.mux({ video: captured.video, audio: captured.audio, output }, ffmpeg);
-    return { output, frames: captured.frames, endReason: captured.endReason };
+    await deps.mux({ video: captured.video, audio: captured.audio, output, sampleRate: format.sampleRate }, ffmpeg);
+    return { output, frames: captured.frames, seconds: seconds(captured.frames), endReason: captured.endReason };
   } catch (err) {
     // After Ctrl-C, whatever failed next (a download, ffmpeg, the mux) is an interruption.
     if (options.signal?.aborted && !(err instanceof ConvertError && err.exitCode === ExitCode.Interrupted)) {

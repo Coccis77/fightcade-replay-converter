@@ -79,7 +79,7 @@ function harness(
   return { deps, log, env: () => emulatorEnv, time: () => t };
 }
 
-const base = { dir: DIR, scale: 'sharp' as const, maxDurationMs: 3_600_000 };
+const base = { dir: DIR, scale: 'sharp' as const, maxDurationMs: 3_600_000, format: GAMES.sfiii3nr1.format };
 
 describe('capture', () => {
   it('passes Windows paths to the emulator and finishes when it exits', async () => {
@@ -168,6 +168,28 @@ describe('capture', () => {
     await expect(capture(deps, { ...base, maxDurationMs: 5_000 })).rejects.toMatchObject({
       exitCode: ExitCode.Recording,
       message: 'The replay had not started when --max-duration was reached',
+    });
+  });
+
+  it('feeds the encoder at the game format and accepts its info file', async () => {
+    const info = 'width=320\nheight=224\nbpp=4\nfps_x100=5918\nsample_rate=44100\n';
+    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000, info });
+    let encoderArgs: string[] = [];
+    const start = deps.startEncoder;
+    deps.startEncoder = (args, onFrames, attach) => {
+      encoderArgs = args;
+      return start(args, onFrames, attach);
+    };
+    await expect(capture(deps, { ...base, format: GAMES.garou.format })).resolves.toMatchObject({ endReason: 'ended' });
+    expect(encoderArgs).toContain('320x224');
+    expect(encoderArgs).toContain('59.18');
+  });
+
+  it('asks for the full link when the emulator never starts (a bare ID is 3rd Strike)', async () => {
+    const { deps } = harness({ emulatorExitsAt: 2_000 });
+    await expect(capture(deps, base)).rejects.toMatchObject({
+      exitCode: ExitCode.Emulator,
+      hint: 'Check the link; a quark ID alone means a 3rd Strike replay. The replay may also no longer exist',
     });
   });
 

@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { DEFAULT_MAX_DURATION_MS, FRAME_FORMAT } from './constants.js';
+import { DEFAULT_MAX_DURATION_MS } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import type { ScaleMode } from './ffmpeg.js';
 
@@ -41,8 +41,8 @@ export function prepareMessage(result: { emulatorUpdated: boolean; warning?: str
   return result.emulatorUpdated ? 'Ready (emulator downloaded).' : 'Ready.';
 }
 
-export function formatReplayLength(frames: number): string {
-  const total = Math.round((frames * 100) / FRAME_FORMAT.fpsX100);
+export function formatReplayLength(seconds: number): string {
+  const total = Math.round(seconds);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 

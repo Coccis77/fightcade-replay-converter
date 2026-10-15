@@ -81,9 +81,10 @@ describe('parseCli', () => {
 });
 
 describe('formatReplayLength', () => {
-  it('turns a frame count into m:ss of replay', () => {
-    expect(formatReplayLength(8220)).toBe('2:18');
-    expect(formatReplayLength(32760)).toBe('9:10');
+  it('formats seconds of replay as m:ss', () => {
+    expect(formatReplayLength(137.9)).toBe('2:18');
+    expect(formatReplayLength(549.7)).toBe('9:10');
+    expect(formatReplayLength(600)).toBe('10:00');
     expect(formatReplayLength(0)).toBe('0:00');
   });
 });

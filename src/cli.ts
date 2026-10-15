@@ -18,9 +18,8 @@ function progressLine(e: ProgressEvent): string {
     case 'connecting':
       return 'Connecting to the replay stream…';
     case 'capturing': {
-      const seconds = e.frames / 59.59;
-      const speed = e.elapsedMs > 0 ? (seconds * 1000) / e.elapsedMs : 0;
-      return `Capturing… ${Math.round(seconds)}s of replay (${e.frames} frames, ×${speed.toFixed(1)})`;
+      const speed = e.elapsedMs > 0 ? (e.seconds * 1000) / e.elapsedMs : 0;
+      return `Capturing… ${Math.round(e.seconds)}s of replay (${e.frames} frames, ×${speed.toFixed(1)})`;
     }
     case 'finalizing':
       return 'Finalizing the MP4…';
@@ -77,7 +76,7 @@ async function main(): Promise<number> {
       onProgress: (e) => process.stderr.write(tty ? `\r\x1b[K${progressLine(e)}` : `${progressLine(e)}\n`),
     });
     if (tty) process.stderr.write('\n');
-    process.stderr.write(`Captured ${formatReplayLength(result.frames)} of replay.\n`);
+    process.stderr.write(`Captured ${formatReplayLength(result.seconds)} of replay.\n`);
     process.stdout.write(`${result.output}\n`);
     return 0;
   } catch (err) {
