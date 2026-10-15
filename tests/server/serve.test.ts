@@ -20,8 +20,8 @@ function fakeDeps(over: Partial<ServeDeps> = {}): ServeDeps & { runs: string[] }
     addresses: () => [],
     dataFile: join(tmpdir(), `fc2mp4-serve-${process.pid}-${Math.random()}.json`),
     inDocker: false,
-    run: async (id) => {
-      runs.push(id);
+    run: async (r) => {
+      runs.push(r.quarkId);
     },
     ...over,
   };
@@ -101,9 +101,9 @@ describe('serve', () => {
     const controller = new AbortController();
     const runs: string[] = [];
     const deps = fakeDeps({
-      run: (id) =>
+      run: (r) =>
         new Promise<void>((_resolve, reject) => {
-          runs.push(id);
+          runs.push(r.quarkId);
           controller.signal.addEventListener('abort', () => reject(new ConvertError(ExitCode.Interrupted, 'Interrupted')));
         }),
     });

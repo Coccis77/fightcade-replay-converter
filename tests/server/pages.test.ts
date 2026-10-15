@@ -8,6 +8,9 @@ describe('pages', () => {
   it('main page: valid script, the texts of every state, no browser dialogs', () => {
     for (const s of scripts(PAGE)) expect(() => new Function(s)).not.toThrow();
     expect(PAGE).not.toContain('/admin'); // the public page never points to the admin area
+    expect(PAGE).toContain('<h1>fc2mp4</h1>');
+    expect(PAGE).toContain('Fightcade replay → MP4');
+    expect(PAGE).not.toMatch(/3rd Strike|Garou/);
     for (const t of ['This page is not ready yet', 'Log in', 'Choose your password', 'replays left today', 'Uploaded by', 'Everyone', 'Log out', 'Download', 'Confirm?']) expect(PAGE).toContain(t);
     expect(PAGE).not.toMatch(/\b(alert|confirm|prompt)\(/);
   });

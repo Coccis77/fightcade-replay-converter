@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Jobs } from '../../src/server/jobs.js';
 import { ConvertError, ExitCode } from '../../src/errors.js';
+import { GAMES } from '../../src/constants.js';
 
 const A = '1700000000000-1111';
 const B = '1700000000000-2222';
 const C = '1700000000000-3333';
+const ref = (quarkId: string) => ({ game: GAMES.sfiii3nr1, quarkId });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 function deferred() {
@@ -18,14 +20,14 @@ function deferred() {
 }
 
 function harness(files: string[] = []) {
-  const runs: { id: string; output: string; progress: (frames: number, ms: number) => void; done: ReturnType<typeof deferred> }[] = [];
+  const runs: { id: string; game: string; output: string; progress: (seconds: number, ms: number) => void; done: ReturnType<typeof deferred> }[] = [];
   const disk = new Set(files);
   const jobs = new Jobs({
     outputDir: '/videos',
     exists: async (p) => disk.has(p),
-    run: (id, output, progress) => {
+    run: (r, output, progress) => {
       const done = deferred();
-      runs.push({ id, output, progress, done });
+      runs.push({ id: r.quarkId, game: r.game.id, output, progress, done });
       return done.promise;
     },
   });
@@ -35,9 +37,9 @@ function harness(files: string[] = []) {
 describe('Jobs', () => {
   it('converts one replay at a time, in order, reporting the queue position', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit(A);
-    await jobs.submit(B);
-    await jobs.submit(C);
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
+    await jobs.submit(ref(C));
     expect(runs.map((r) => [r.id, r.output])).toEqual([[A, `/videos/${A}.mp4`]]);
     expect(jobs.view(A)).toEqual({ state: 'converting', seconds: 0, speed: 0 });
     expect(jobs.view(B)).toEqual({ state: 'queued', position: 1 });
@@ -51,17 +53,17 @@ describe('Jobs', () => {
 
   it('reports progress as seconds of replay and speed', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit(A);
-    runs[0]!.progress(5959, 10_000); // 100 s of replay in 10 s
+    await jobs.submit(ref(A));
+    runs[0]!.progress(100, 10_000); // 100 s of replay in 10 s
     expect(jobs.view(A)).toEqual({ state: 'converting', seconds: 100, speed: 10 });
   });
 
   it('joins an existing job instead of converting twice', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit(A);
-    await jobs.submit(B);
-    await jobs.submit(A);
-    await jobs.submit(B);
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
     runs[0]!.done.resolve();
     await flush();
     expect(runs.map((r) => r.id)).toEqual([A, B]);
@@ -69,20 +71,20 @@ describe('Jobs', () => {
 
   it('serves an MP4 already in the folder without converting (also after a restart)', async () => {
     const { jobs, runs } = harness([`/videos/${A}.mp4`]);
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     expect(jobs.view(A)).toEqual({ state: 'done' });
     expect(runs).toEqual([]);
   });
 
   it('keeps going after a failure, with the message and hint; pasting again retries', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit(A);
-    await jobs.submit(B);
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
     runs[0]!.done.reject(new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the quark ID'));
     await flush();
     expect(jobs.view(A)).toEqual({ state: 'failed', error: 'The replay stream never started', hint: 'Check the quark ID' });
     expect(jobs.view(B)).toMatchObject({ state: 'converting' });
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     expect(jobs.view(A)).toEqual({ state: 'queued', position: 1 });
     runs[1]!.done.resolve();
     await flush();
@@ -91,8 +93,8 @@ describe('Jobs', () => {
 
   it('stop() drops queued jobs; the current one ends on its own', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit(A);
-    await jobs.submit(B);
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
     jobs.stop();
     expect(jobs.view(B)).toEqual({ state: 'failed', error: 'The server stopped' });
     runs[0]!.done.reject(new ConvertError(ExitCode.Interrupted, 'Interrupted'));
@@ -102,9 +104,9 @@ describe('Jobs', () => {
 
   it('converts again when a finished MP4 was deleted from the folder', async () => {
     const { jobs, runs, disk } = harness([`/videos/${A}.mp4`]);
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     disk.delete(`/videos/${A}.mp4`);
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     expect(jobs.view(A)).toMatchObject({ state: 'converting' });
     expect(runs.map((r) => r.id)).toEqual([A]);
   });
@@ -112,7 +114,7 @@ describe('Jobs', () => {
   it('accepts nothing new once stopped', async () => {
     const { jobs, runs } = harness();
     jobs.stop();
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     expect(jobs.view(A)).toEqual({ state: 'failed', error: 'The server stopped' });
     expect(runs).toEqual([]);
   });
@@ -121,15 +123,15 @@ describe('Jobs', () => {
     const { jobs } = harness([`/videos/${B}.mp4`]);
     let asked = 0;
     const beforeQueue = async () => (asked++, true);
-    expect(await jobs.submit(A, { beforeQueue })).toBe('queued');
-    expect(await jobs.submit(A, { beforeQueue })).toBe('joined');
-    expect(await jobs.submit(B, { beforeQueue })).toBe('done');
+    expect(await jobs.submit(ref(A), { beforeQueue })).toBe('queued');
+    expect(await jobs.submit(ref(A), { beforeQueue })).toBe('joined');
+    expect(await jobs.submit(ref(B), { beforeQueue })).toBe('done');
     expect(asked).toBe(1);
   });
 
   it('refuses when beforeQueue says no, leaving nothing queued', async () => {
     const { jobs, runs } = harness();
-    expect(await jobs.submit(A, { beforeQueue: async () => false })).toBe('refused');
+    expect(await jobs.submit(ref(A), { beforeQueue: async () => false })).toBe('refused');
     expect(jobs.view(A)).toBeNull();
     expect(runs).toEqual([]);
   });
@@ -138,7 +140,7 @@ describe('Jobs', () => {
     const { jobs, runs } = harness();
     let asked = 0;
     const beforeQueue = () => new Promise<boolean>((resolve) => setTimeout(() => resolve((asked++, true)), 20));
-    const outcomes = await Promise.all([jobs.submit(A, { beforeQueue }), jobs.submit(A, { beforeQueue })]);
+    const outcomes = await Promise.all([jobs.submit(ref(A), { beforeQueue }), jobs.submit(ref(A), { beforeQueue })]);
     expect(outcomes.sort()).toEqual(['joined', 'queued']);
     expect(asked).toBe(1);
     expect(runs.map((r) => r.id)).toEqual([A]);
@@ -156,10 +158,10 @@ describe('Jobs', () => {
       },
       onFinish: (id, view) => finished.push(`${id}:${view.state}`),
     });
-    await jobs.submit(A);
+    await jobs.submit(ref(A));
     await jobs.idle();
     fail = true;
-    await jobs.submit(B);
+    await jobs.submit(ref(B));
     await jobs.idle();
     expect(finished).toEqual([`${A}:done`, `${B}:failed`]);
     jobs.forget(A);
@@ -168,18 +170,32 @@ describe('Jobs', () => {
 
   it('undoes the reservation when the limit check fails (e.g. disk full)', async () => {
     const { jobs } = harness();
-    await expect(jobs.submit(A, { beforeQueue: async () => { throw new Error('ENOSPC'); } })).rejects.toThrow('ENOSPC');
+    await expect(jobs.submit(ref(A), { beforeQueue: async () => { throw new Error('ENOSPC'); } })).rejects.toThrow('ENOSPC');
     expect(jobs.view(A)).toBeNull();
-    expect(await jobs.submit(A, { beforeQueue: async () => true })).toBe('queued');
+    expect(await jobs.submit(ref(A), { beforeQueue: async () => true })).toBe('queued');
   });
 
   it('reports replays dropped by stop() as failed, so they are refunded', async () => {
     const finished: string[] = [];
     const jobs = new Jobs({ outputDir: '/videos', exists: async () => false, run: () => new Promise(() => {}), onFinish: (id, v) => finished.push(`${id}:${v.state}`) });
-    await jobs.submit(A);
-    await jobs.submit(B);
+    await jobs.submit(ref(A));
+    await jobs.submit(ref(B));
     jobs.stop();
     expect(finished).toEqual([`${B}:failed`]);
+  });
+
+  it('hands the runner the replay game', async () => {
+    const { jobs, runs } = harness();
+    await jobs.submit({ game: GAMES.garou, quarkId: A });
+    expect(runs.map((r) => [r.id, r.game])).toEqual([[A, 'garou']]);
+  });
+
+  it('shows a ROM error from the runner as the failed view', async () => {
+    const { jobs, runs } = harness();
+    await jobs.submit({ game: GAMES.garou, quarkId: A });
+    runs[0]!.done.reject(new ConvertError(ExitCode.Preflight, 'Garou: Mark of the Wolves ROM not found: /f/ROMs/garou.zip', 'Open Garou once in Fightcade so it downloads the ROM'));
+    await flush();
+    expect(jobs.view(A)).toEqual({ state: 'failed', error: 'Garou: Mark of the Wolves ROM not found: /f/ROMs/garou.zip', hint: 'Open Garou once in Fightcade so it downloads the ROM' });
   });
 
   it('knows nothing about replays never submitted', () => {

@@ -94,8 +94,8 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
         convertDeps,
       );
     },
-    run: async (quarkId, output, onProgress) => {
-      await convert(quarkId, {
+    run: async (ref, output, onProgress) => {
+      await convert(ref, {
         output,
         scale: 'sharp',
         maxDurationMs: DEFAULT_MAX_DURATION_MS,
@@ -103,7 +103,7 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
         signal: options.signal,
         log: options.log,
         onProgress: (e) => {
-          if (e.phase === 'capturing') onProgress(e.frames, e.elapsedMs);
+          if (e.phase === 'capturing') onProgress(e.seconds, e.elapsedMs);
         },
       });
     },

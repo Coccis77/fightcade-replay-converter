@@ -41,9 +41,6 @@ export const STREAM_PORT = 7100;
 
 export const EMULATOR_EXE = 'fcadefbneo-fc2mp4.exe';
 
-// Raw format written by the patched emulator for sfiii3nr1; checked against its info file.
-export const FRAME_FORMAT = { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 } as const;
-
 export const TIMEOUTS = {
   firstFrameMs: 60_000,
   // The stream never signals its end; the emulator exits after this long without input.

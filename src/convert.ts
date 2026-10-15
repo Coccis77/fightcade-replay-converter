@@ -121,8 +121,8 @@ export function defaultDeps(): ConvertDeps {
   };
 }
 
-export async function convert(input: string, options: ConvertOptions, deps: ConvertDeps = defaultDeps()): Promise<ConvertResult> {
-  const ref = parseReplayRef(input);
+export async function convert(input: string | ReplayRef, options: ConvertOptions, deps: ConvertDeps = defaultDeps()): Promise<ConvertResult> {
+  const ref = typeof input === 'string' ? parseReplayRef(input) : input;
   const log = options.log ?? (() => {});
   const debug = options.debug ?? (() => {});
   const install = await deps.locateInstall(options.fightcadeDir);

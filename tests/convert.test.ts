@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildEmulatorLocally, convert, notWritableHint, prepare, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
 import { installLayout } from '../src/install.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
+import { GAMES } from '../src/constants.js';
 
 const install = installLayout('/Apps/FightCade2.app');
 const ID = '1700000000000-1234';
@@ -108,6 +109,12 @@ describe('convert', () => {
       message: 'Garou: Mark of the Wolves ROM not found',
     });
     expect(calls).toEqual(['lock', 'preflight', 'unlock']);
+  });
+
+  it('accepts an already parsed replay', async () => {
+    const { deps, calls } = harness();
+    await convert({ game: GAMES.garou, quarkId: ID }, baseOptions, deps);
+    expect(calls).toContain(`capture:garou:${ID}:/tmp/run:320`);
   });
 
   it('fails before capturing when the output folder is not writable', async () => {

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
-import { FRAME_FORMAT } from '../constants.js';
 import { ConvertError } from '../errors.js';
+import type { ReplayRef } from '../replayRef.js';
 
 export type JobView =
   | { state: 'queued'; position: number }
@@ -8,7 +8,7 @@ export type JobView =
   | { state: 'done' }
   | { state: 'failed'; error: string; hint?: string };
 
-export type JobRunner = (quarkId: string, output: string, onProgress: (frames: number, elapsedMs: number) => void) => Promise<void>;
+export type JobRunner = (ref: ReplayRef, output: string, onProgress: (seconds: number, elapsedMs: number) => void) => Promise<void>;
 
 export type SubmitOutcome = 'queued' | 'joined' | 'done' | 'refused' | 'stopped';
 
@@ -24,7 +24,7 @@ export interface JobsDeps {
 // converted twice; an MP4 already in the output folder is done at once (also after a restart).
 export class Jobs {
   private readonly views = new Map<string, JobView>();
-  private readonly queue: string[] = [];
+  private readonly queue: ReplayRef[] = [];
   private current: string | null = null;
   private stopped = false;
   private worker: Promise<void> = Promise.resolve();
@@ -35,7 +35,8 @@ export class Jobs {
     return join(this.deps.outputDir, `${id}.mp4`);
   }
 
-  async submit(id: string, options: { beforeQueue?: () => Promise<boolean> } = {}): Promise<SubmitOutcome> {
+  async submit(ref: ReplayRef, options: { beforeQueue?: () => Promise<boolean> } = {}): Promise<SubmitOutcome> {
+    const id = ref.quarkId;
     if (this.stopped) {
       this.views.set(id, { state: 'failed', error: 'The server stopped' });
       return 'stopped';
@@ -75,7 +76,7 @@ export class Jobs {
       this.deps.onFinish?.(id, failed); // already counted: refunded
       return 'stopped';
     }
-    this.queue.push(id);
+    this.queue.push(ref);
     this.deps.log?.(`Queued ${id}`);
     if (this.current === null) this.worker = this.drain();
     return 'queued';
@@ -88,14 +89,14 @@ export class Jobs {
 
   view(id: string): JobView | null {
     const view = this.views.get(id);
-    if (view?.state === 'queued') return { state: 'queued', position: this.queue.indexOf(id) + (this.current === null ? 0 : 1) };
+    if (view?.state === 'queued') return { state: 'queued', position: this.queue.findIndex((r) => r.quarkId === id) + (this.current === null ? 0 : 1) };
     return view ?? null;
   }
 
   // Server stopping: queued replays are never started (the current conversion is aborted by the signal).
   stop(): void {
     this.stopped = true;
-    for (const id of this.queue.splice(0)) {
+    for (const { quarkId: id } of this.queue.splice(0)) {
       const failed: JobView = { state: 'failed', error: 'The server stopped' };
       this.views.set(id, failed);
       this.deps.onFinish?.(id, failed);
@@ -113,13 +114,13 @@ export class Jobs {
 
   private async drain(): Promise<void> {
     while (this.queue.length > 0 && !this.stopped) {
-      const id = this.queue.shift()!;
+      const ref = this.queue.shift()!;
+      const id = ref.quarkId;
       this.current = id;
       this.views.set(id, { state: 'converting', seconds: 0, speed: 0 });
       this.deps.log?.(`Converting ${id}`);
       try {
-        await this.deps.run(id, this.filePath(id), (frames, elapsedMs) => {
-          const seconds = (frames * 100) / FRAME_FORMAT.fpsX100;
+        await this.deps.run(ref, this.filePath(id), (seconds, elapsedMs) => {
           const speed = elapsedMs > 0 ? Math.round((seconds * 10_000) / elapsedMs) / 10 : 0;
           this.views.set(id, { state: 'converting', seconds: Math.floor(seconds), speed });
         });

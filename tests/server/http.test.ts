@@ -10,6 +10,7 @@ import { LoginThrottle } from '../../src/server/auth.js';
 import { createHandler } from '../../src/server/http.js';
 import { Jobs, type JobRunner } from '../../src/server/jobs.js';
 import { DataStore } from '../../src/server/store.js';
+import { GAMES } from '../../src/constants.js';
 
 const ID = '1791006077129-2245';
 const ID2 = '1790980205888-4792';
@@ -262,6 +263,22 @@ describe('requests', () => {
     const res = await admin.post('/api/jobs', { url: 'hello' });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: expect.stringContaining('Not a Fightcade replay link') });
+    const other = await admin.post('/api/jobs', { url: `https://replay.fightcade.com/fbneo/kof98/${ID}` });
+    expect(other.status).toBe(400);
+    expect(await other.json()).toMatchObject({ error: expect.stringContaining('supported games are sfiii3nr1 (3rd Strike), garou (Garou)') });
+  });
+
+  it('passes the game of the link to the runner', async () => {
+    const seen: string[] = [];
+    const ctx = await start(async (r, output) => {
+      seen.push(`${r.game.id}:${r.quarkId}`);
+      await writeFile(output, 'MP4DATA');
+    });
+    const admin = client(ctx.base);
+    await admin.post('/api/setup', { name: 'Coccis', password: 'password1' });
+    expect((await admin.post('/api/jobs', { url: `https://replay.fightcade.com/fbneo/garou/${ID}` })).status).toBe(200);
+    await ctx.jobs.idle();
+    expect(seen).toEqual([`garou:${ID}`]);
   });
 
   it('refuses malformed and non-JSON requests and keeps running', async () => {
@@ -286,7 +303,7 @@ describe('small fixes', () => {
   it('a delete that races a new request for the same replay keeps the new request', async () => {
     const ctx = await start(writesMp4, undefined, async (p, jobs, accounts) => {
       await rm(p, { force: true });
-      await jobs.submit(ID, { beforeQueue: () => accounts.claim(ID, 'Coccis') }); // arrives during the delete
+      await jobs.submit({ game: GAMES.sfiii3nr1, quarkId: ID }, { beforeQueue: () => accounts.claim(ID, 'Coccis') }); // arrives during the delete
     });
     const admin = client(ctx.base);
     await admin.post('/api/setup', { name: 'Coccis', password: 'password1' });

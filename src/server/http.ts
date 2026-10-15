@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ConvertError } from '../errors.js';
-import { parseReplayRef } from '../replayRef.js';
+import { parseReplayRef, type ReplayRef } from '../replayRef.js';
 import type { Jobs } from './jobs.js';
 import { PAGE } from './page.js';
 import { AccountError, DEFAULT_LIMIT, type Accounts, type PublicUser } from './accounts.js';
@@ -96,14 +96,15 @@ async function createJob(app: App, user: PublicUser, req: IncomingMessage, res: 
   const body = await readJson(req, res);
   if (!body) return;
   if (typeof body.url !== 'string') return json(res, 400, { error: 'Send {"url": "<Fightcade replay link>"}' });
-  let id: string;
+  let ref: ReplayRef;
   try {
-    id = parseReplayRef(body.url).quarkId;
+    ref = parseReplayRef(body.url);
   } catch (err) {
     if (err instanceof ConvertError) return json(res, 400, { error: err.message, hint: err.hint });
     throw err;
   }
-  const outcome = await app.jobs.submit(id, { beforeQueue: () => app.accounts.claim(id, user.name) });
+  const id = ref.quarkId;
+  const outcome = await app.jobs.submit(ref, { beforeQueue: () => app.accounts.claim(id, user.name) });
   if (outcome === 'refused') return json(res, 429, { error: `You've used your ${user.limit} replays for today`, hint: 'Back tomorrow' });
   if (outcome === 'stopped') return json(res, 503, { error: 'The server is stopping' });
   if (outcome === 'done') await app.accounts.recordExisting(id, user.name);

@@ -27,8 +27,8 @@ a { color: var(--accent); }
 </head>
 <body>
 <main>
-  <h1>Fightcade replay → MP4</h1>
-  <p class="sub">Street Fighter III: 3rd Strike</p>
+  <h1>fc2mp4</h1>
+  <p class="sub">Fightcade replay → MP4</p>
   <div id="app" class="muted">Loading…</div>
 </main>
 <script>
