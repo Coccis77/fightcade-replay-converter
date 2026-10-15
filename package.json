@@ -1,6 +1,6 @@
 {
   "name": "fc2mp4",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Convert Fightcade replays (3rd Strike, Garou: Mark of the Wolves) to MP4",
   "type": "module",
   "bin": {
