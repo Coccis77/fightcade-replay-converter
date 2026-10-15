@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
+import type { Game } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
@@ -11,7 +12,7 @@ import { ConvertError, ExitCode } from './errors.js';
 import { run, which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
 import { pathExists } from './fsUtil.js';
-import { checkTools, locateInstall, preflight, type FightcadeInstall } from './install.js';
+import { checkRoms, checkTools, locateInstall, preflight, type FightcadeInstall } from './install.js';
 import { acquireLock } from './lock.js';
 import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
@@ -49,6 +50,7 @@ export interface ConvertDeps {
   resolveOutput(quarkId: string, output?: string): Promise<string>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
+  checkRoms(install: FightcadeInstall, game: Game): Promise<void>;
   checkWritable(dir: string): Promise<void>;
   checkTools(): Promise<void>;
   locateFfmpeg(install: FightcadeInstall | null, signal?: AbortSignal): Promise<string>;
@@ -77,6 +79,7 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists, which: (cmd) => which(cmd, platform) }),
+    checkRoms: (install, game) => checkRoms(install, game, pathExists),
     checkTools: () => checkTools(platform, (cmd) => which(cmd, platform)),
     checkWritable: async (dir) => {
       try {
@@ -131,6 +134,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
   let dir: string | undefined;
   try {
     await deps.preflight(install);
+    await deps.checkRoms(install, ref.game);
     await deps.checkWritable(dirname(output));
     // First run on Windows downloads ffmpeg and the emulator: say so before going quiet.
     options.onProgress?.({ phase: 'preparing' });

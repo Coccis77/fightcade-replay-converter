@@ -1,4 +1,4 @@
-import { GAME } from './constants.js';
+import type { Game } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { pathFor, supportedPlatform, type Platform } from './platform.js';
 
@@ -11,7 +11,6 @@ export interface FightcadeInstall {
   exe: string;
   ggponet: string;
   romsDir: string;
-  rom: string;
   mainIni: string;
   // wine.sh on macOS; null on Windows (runs directly) and Linux (headless command built in capture.ts).
   launcher: string | null;
@@ -28,7 +27,6 @@ export function installLayout(root: string, platform: Platform = 'darwin', fbneo
     exe: p.join(fbneo, 'fcadefbneo.exe'),
     ggponet: p.join(fbneo, 'ggponet.dll'),
     romsDir: p.join(fbneo, 'ROMs'),
-    rom: p.join(fbneo, 'ROMs', `${GAME}.zip`),
     mainIni: p.join(fbneo, 'config', 'fcadefbneo.ini'),
     launcher: platform === 'darwin' ? p.join(root, 'Contents', 'Resources', 'wine.sh') : null,
   };
@@ -97,11 +95,19 @@ export async function checkTools(platform: Platform, which: (cmd: string) => Pro
 }
 
 export async function preflight(install: FightcadeInstall, deps: PreflightDeps): Promise<void> {
-  if (!(await deps.exists(install.rom))) {
-    throw new ConvertError(ExitCode.Preflight, `3rd Strike ROM not found: ${install.rom}`, 'Open 3rd Strike once in Fightcade so it downloads the ROM');
-  }
   if (install.launcher !== null && !(await deps.exists(install.launcher))) {
     throw new ConvertError(ExitCode.Preflight, `wine.sh not found: ${install.launcher}`, 'Reinstall Fightcade');
   }
   await checkTools(install.platform, deps.which);
+}
+
+// Per conversion, for the replay's game: a server with only one game's ROMs still converts that game.
+export async function checkRoms(install: FightcadeInstall, game: Game, exists: (p: string) => Promise<boolean>): Promise<void> {
+  const p = pathFor(install.platform);
+  for (const rom of game.roms) {
+    const file = p.join(install.romsDir, rom);
+    if (!(await exists(file))) {
+      throw new ConvertError(ExitCode.Preflight, `${game.title} ROM not found: ${file}`, `Open ${game.shortTitle} once in Fightcade so it downloads the ROM`);
+    }
+  }
 }

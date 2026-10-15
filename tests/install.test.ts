@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkTools, installLayout, locateInstall, preflight } from '../src/install.js';
+import { checkRoms, checkTools, installLayout, locateInstall, preflight } from '../src/install.js';
+import { GAMES } from '../src/constants.js';
 import { ExitCode } from '../src/errors.js';
 
 const MAC_ROOT = '/Applications/FightCade2.app';
@@ -13,7 +14,6 @@ describe('installLayout', () => {
     expect(i.exe).toBe(`${i.fbneoDir}/fcadefbneo.exe`);
     expect(i.ggponet).toBe(`${i.fbneoDir}/ggponet.dll`);
     expect(i.romsDir).toBe(`${i.fbneoDir}/ROMs`);
-    expect(i.rom).toBe(`${i.fbneoDir}/ROMs/sfiii3nr1.zip`);
     expect(i.mainIni).toBe(`${i.fbneoDir}/config/fcadefbneo.ini`);
     expect(i.launcher).toBe(`${MAC_ROOT}/Contents/Resources/wine.sh`);
   });
@@ -21,7 +21,6 @@ describe('installLayout', () => {
     const i = installLayout(WIN_ROOT, 'win32');
     expect(i.fbneoDir).toBe(`${WIN_ROOT}\\emulator\\fbneo`);
     expect(i.exe).toBe(`${WIN_ROOT}\\emulator\\fbneo\\fcadefbneo.exe`);
-    expect(i.rom).toBe(`${WIN_ROOT}\\emulator\\fbneo\\ROMs\\sfiii3nr1.zip`);
     expect(i.launcher).toBeNull();
   });
 });
@@ -63,13 +62,36 @@ describe('locateInstall', () => {
 });
 
 describe('preflight', () => {
-  it('needs the ROM, and wine.sh only on macOS', async () => {
+  it('needs wine.sh only on macOS, and no ROM (checked per conversion)', async () => {
     const mac = installLayout(MAC_ROOT, 'darwin');
     const win = installLayout(WIN_ROOT, 'win32');
     await expect(preflight(mac, { exists: async () => true, which: async () => '/usr/bin/x' })).resolves.toBeUndefined();
     await expect(preflight(win, { exists: async (p) => !p.endsWith('wine.sh'), which: async () => '/usr/bin/x' })).resolves.toBeUndefined();
     await expect(preflight(mac, { exists: async (p) => !p.endsWith('wine.sh'), which: async () => '/usr/bin/x' })).rejects.toMatchObject({ message: expect.stringMatching(/wine\.sh/) });
-    await expect(preflight(win, { exists: async (p) => !p.endsWith('sfiii3nr1.zip'), which: async () => '/usr/bin/x' })).rejects.toMatchObject({ message: expect.stringMatching(/ROM not found/) });
+    await expect(preflight(win, { exists: async (p) => !p.endsWith('.zip'), which: async () => '/usr/bin/x' })).resolves.toBeUndefined();
+  });
+});
+
+describe('checkRoms', () => {
+  const win = installLayout(WIN_ROOT, 'win32');
+  const roms = `${WIN_ROOT}\\emulator\\fbneo\\ROMs`;
+  const only = (...files: string[]) => async (p: string) => files.some((f) => p === `${roms}\\${f}`);
+
+  it('passes when every ROM of the game is there, whatever the other game', async () => {
+    await expect(checkRoms(win, GAMES.garou, only('garou.zip', 'neogeo.zip'))).resolves.toBeUndefined();
+    await expect(checkRoms(win, GAMES.sfiii3nr1, only('sfiii3nr1.zip', 'sfiii3.zip'))).resolves.toBeUndefined();
+  });
+
+  it('names the game and the missing file', async () => {
+    await expect(checkRoms(win, GAMES.garou, only('garou.zip'))).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      message: `Garou: Mark of the Wolves ROM not found: ${roms}\\neogeo.zip`,
+      hint: 'Open Garou once in Fightcade so it downloads the ROM',
+    });
+    await expect(checkRoms(win, GAMES.sfiii3nr1, only('sfiii3nr1.zip'))).rejects.toMatchObject({
+      message: `Street Fighter III: 3rd Strike ROM not found: ${roms}\\sfiii3.zip`,
+      hint: 'Open 3rd Strike once in Fightcade so it downloads the ROM',
+    });
   });
 });
 
@@ -89,7 +111,7 @@ describe('Linux Fightcade files', () => {
   it('accepts a Fightcade root (official install or a copy)', async () => {
     const root = '/srv/fightcade';
     const i = await locateInstall({ platform: 'linux', home, env: {}, override: root, exists: async (p) => p === `${root}/emulator/fbneo/ggponet.dll` });
-    expect(i).toMatchObject({ platform: 'linux', root, fbneoDir: `${root}/emulator/fbneo`, launcher: null, rom: `${root}/emulator/fbneo/ROMs/sfiii3nr1.zip` });
+    expect(i).toMatchObject({ platform: 'linux', root, fbneoDir: `${root}/emulator/fbneo`, launcher: null, romsDir: `${root}/emulator/fbneo/ROMs` });
   });
   it('accepts the fbneo folder itself (files-only server folder)', async () => {
     const dir = '/srv/fbneo-files';

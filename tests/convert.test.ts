@@ -21,6 +21,9 @@ function harness(over: Partial<ConvertDeps> = {}) {
     preflight: async () => {
       calls.push('preflight');
     },
+    checkRoms: async (_install, game) => {
+      calls.push(`roms:${game.id}`);
+    },
     checkWritable: async (dir) => {
       calls.push(`writable:${dir}`);
     },
@@ -70,7 +73,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run:384`,
+      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run:384`,
       'mkdir:/out', `mux:/out/${ID}.mp4:44100`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
@@ -94,6 +97,19 @@ describe('convert', () => {
     expect(result.seconds).toBe(600);
   });
 
+  it('checks the ROMs of the replay game before capturing', async () => {
+    const { deps, calls } = harness({
+      checkRoms: async (_install, game) => {
+        throw new ConvertError(ExitCode.Preflight, `${game.title} ROM not found`);
+      },
+    });
+    await expect(convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps)).rejects.toMatchObject({
+      exitCode: ExitCode.Preflight,
+      message: 'Garou: Mark of the Wolves ROM not found',
+    });
+    expect(calls).toEqual(['lock', 'preflight', 'unlock']);
+  });
+
   it('fails before capturing when the output folder is not writable', async () => {
     const { deps, calls } = harness({
       checkWritable: async (dir) => {
@@ -101,7 +117,7 @@ describe('convert', () => {
       },
     });
     await expect(convert(ID, baseOptions, deps)).rejects.toMatchObject({ exitCode: ExitCode.Preflight, message: 'Cannot write to /out' });
-    expect(calls).toEqual(['lock', 'preflight', 'unlock']);
+    expect(calls).toEqual(['lock', 'preflight', 'roms:sfiii3nr1', 'unlock']);
   });
 
   it('removes the temp dir and releases the lock when capture fails, without muxing', async () => {

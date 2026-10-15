@@ -1,5 +1,3 @@
-export const GAME = 'sfiii3nr1';
-
 export interface FrameFormat {
   readonly width: number;
   readonly height: number;
