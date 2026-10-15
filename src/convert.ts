@@ -15,7 +15,7 @@ import { checkTools, locateInstall, preflight, type FightcadeInstall } from './i
 import { acquireLock } from './lock.js';
 import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
-import { parseReplayRef } from './replayRef.js';
+import { parseReplayRef, type ReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
 import { ensureWinePrefix } from './winePrefix.js';
 
@@ -55,7 +55,7 @@ export interface ConvertDeps {
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   prepareWine(install: FightcadeInstall | null, onSetup: () => void, signal?: AbortSignal): Promise<void>;
   makeTempDir(): Promise<string>;
-  capture(install: FightcadeInstall, quarkId: string, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
+  capture(install: FightcadeInstall, ref: ReplayRef, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
   mux(args: { video: string; audio: string; output: string }, ffmpeg: string): Promise<void>;
   removeDir(dir: string): Promise<void>;
@@ -108,7 +108,7 @@ export function defaultDeps(): ConvertDeps {
       });
     },
     makeTempDir: () => mkdtemp(join(tmpdir(), 'fc2mp4-')),
-    capture: (install, quarkId, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, quarkId, ffmpeg, install.platform === 'linux' ? app.wineprefixDir : null), opts),
+    capture: (install, ref, ffmpeg, opts) => capture(defaultCaptureDeps(install, app.runtimeDir, ref, ffmpeg, install.platform === 'linux' ? app.wineprefixDir : null), opts),
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true });
     },
@@ -143,7 +143,7 @@ export async function convert(input: string, options: ConvertOptions, deps: Conv
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });
-    const captured = await deps.capture(install, ref.quarkId, ffmpeg, {
+    const captured = await deps.capture(install, ref, ffmpeg, {
       dir,
       scale: options.scale,
       maxDurationMs: options.maxDurationMs,

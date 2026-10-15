@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { parseReplayRef, streamArg } from '../src/replayRef.js';
+import { DEFAULT_GAME, GAMES } from '../src/constants.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
 
 const ID = '1700000000000-1234';
+
+function thrown(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (err) {
+    return err;
+  }
+  return undefined;
+}
 
 describe('parseReplayRef', () => {
   it.each([
@@ -12,19 +22,26 @@ describe('parseReplayRef', () => {
     [`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}/`],
     [`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}?t=42#x`],
     [`fcade://play/fbneo/sfiii3nr1/${ID}`],
-  ])('accepts %j', (input) => {
-    expect(parseReplayRef(input)).toEqual({ game: 'sfiii3nr1', quarkId: ID });
+  ])('reads %j as 3rd Strike', (input) => {
+    expect(parseReplayRef(input)).toEqual({ game: GAMES.sfiii3nr1, quarkId: ID });
   });
 
-  it('rejects another game with a usage error naming it', () => {
-    let error: unknown;
-    try {
-      parseReplayRef(`https://replay.fightcade.com/fbneo/garou/${ID}`);
-    } catch (err) {
-      error = err;
-    }
+  it.each([[`https://replay.fightcade.com/fbneo/garou/${ID}`], [`fcade://play/fbneo/garou/${ID}`]])('reads %j as Garou', (input) => {
+    expect(parseReplayRef(input)).toEqual({ game: GAMES.garou, quarkId: ID });
+  });
+
+  it('treats a bare quark ID as 3rd Strike', () => {
+    expect(DEFAULT_GAME).toBe(GAMES.sfiii3nr1);
+    expect(parseReplayRef(ID).game.id).toBe('sfiii3nr1');
+  });
+
+  it.each([['kof98'], ['constructor'], ['toString'], ['__proto__']])('rejects game %j with a usage error listing the supported games', (game) => {
+    const error = thrown(() => parseReplayRef(`https://replay.fightcade.com/fbneo/${game}/${ID}`));
     expect(error).toBeInstanceOf(ConvertError);
-    expect(error).toMatchObject({ exitCode: ExitCode.Usage, message: expect.stringContaining('garou') });
+    expect(error).toMatchObject({
+      exitCode: ExitCode.Usage,
+      message: `Unsupported game "${game}": supported games are sfiii3nr1 (3rd Strike), garou (Garou)`,
+    });
   });
 
   it.each([[''], ['hello'], ['https://replay.fightcade.com/'], ['1700000000000']])('rejects %j', (input) => {
@@ -33,7 +50,15 @@ describe('parseReplayRef', () => {
 });
 
 describe('streamArg', () => {
-  it('builds the quark:stream argument with the client suffix and port', () => {
-    expect(streamArg(ID)).toBe(`quark:stream,sfiii3nr1,${ID}.7,7100`);
+  it('builds the quark:stream argument for the replay game, with the client suffix and port', () => {
+    expect(streamArg({ game: GAMES.sfiii3nr1, quarkId: ID })).toBe(`quark:stream,sfiii3nr1,${ID}.7,7100`);
+    expect(streamArg({ game: GAMES.garou, quarkId: ID })).toBe(`quark:stream,garou,${ID}.7,7100`);
+  });
+});
+
+describe('GAMES', () => {
+  it('holds the measured formats and required ROMs', () => {
+    expect(GAMES.sfiii3nr1).toMatchObject({ roms: ['sfiii3nr1.zip', 'sfiii3.zip'], format: { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 } });
+    expect(GAMES.garou).toMatchObject({ roms: ['garou.zip', 'neogeo.zip'], format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 } });
   });
 });

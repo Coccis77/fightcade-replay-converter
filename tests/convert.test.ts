@@ -46,8 +46,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push('tmp');
       return '/tmp/run';
     },
-    capture: async (_install, quarkId, _ffmpeg, opts) => {
-      calls.push(`capture:${quarkId}:${opts.dir}`);
+    capture: async (_install, ref, _ffmpeg, opts) => {
+      calls.push(`capture:${ref.game.id}:${ref.quarkId}:${opts.dir}`);
       return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, endReason: 'ended' };
     },
     mkdir: async (dir) => {
@@ -70,9 +70,15 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:${ID}:/tmp/run`,
+      'lock', 'preflight', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4`, 'rmdir:/tmp/run', 'unlock',
     ]);
+  });
+
+  it('captures the game from the link', async () => {
+    const { deps, calls } = harness();
+    await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps);
+    expect(calls).toContain(`capture:garou:${ID}:/tmp/run`);
   });
 
   it('fails before capturing when the output folder is not writable', async () => {

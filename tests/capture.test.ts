@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { capture, emulatorCommand, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
+import { GAMES } from '../src/constants.js';
+
+const SF3 = { game: GAMES.sfiii3nr1, quarkId: '1-2' };
 
 const INFO = 'width=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
 const DIR = '/tmp/fc2mp4-x';
@@ -194,9 +197,13 @@ describe('winPath', () => {
 });
 
 describe('emulator launch per platform', () => {
+  it('streams the replay game', () => {
+    const mac = installLayout('/Applications/FightCade2.app', 'darwin');
+    expect(emulatorCommand(mac, '/rt', { game: GAMES.garou, quarkId: '1-2' }).args).toEqual(['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,garou,1-2.7,7100']);
+  });
   it('runs through wine.sh on macOS', () => {
     const mac = installLayout('/Applications/FightCade2.app', 'darwin');
-    expect(emulatorCommand(mac, '/rt', '1-2')).toEqual({
+    expect(emulatorCommand(mac, '/rt', SF3)).toEqual({
       command: '/Applications/FightCade2.app/Contents/Resources/wine.sh',
       args: ['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,sfiii3nr1,1-2.7,7100'],
     });
@@ -205,7 +212,7 @@ describe('emulator launch per platform', () => {
   it('runs the exe directly on Windows, with spaces in the path', () => {
     const win = installLayout('C:\\Users\\Jean Pierre\\Documents\\Fightcade', 'win32');
     const rt = 'C:\\Users\\Jean Pierre\\AppData\\Local\\fc2mp4\\runtime';
-    expect(emulatorCommand(win, rt, '1-2')).toEqual({
+    expect(emulatorCommand(win, rt, SF3)).toEqual({
       command: `${rt}\\fcadefbneo-fc2mp4.exe`,
       args: ['quark:stream,sfiii3nr1,1-2.7,7100'],
     });
@@ -219,7 +226,7 @@ describe('headless launch on Linux', () => {
   const prefix = '/home/a/.cache/fc2mp4/wineprefix';
 
   it('launches the emulator with plain wine: no display needed, its exit code comes back', () => {
-    expect(emulatorCommand(linux, rt, '1-2')).toEqual({
+    expect(emulatorCommand(linux, rt, SF3)).toEqual({
       command: 'wine',
       args: [`${rt}/fcadefbneo-fc2mp4.exe`, 'quark:stream,sfiii3nr1,1-2.7,7100'],
     });

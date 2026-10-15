@@ -1,5 +1,42 @@
 export const GAME = 'sfiii3nr1';
 
+export interface FrameFormat {
+  readonly width: number;
+  readonly height: number;
+  readonly bpp: number;
+  readonly fpsX100: number;
+  readonly sampleRate: number;
+}
+
+export interface Game {
+  readonly id: string; // ROM name, as in replay links and quark:stream
+  readonly title: string;
+  readonly shortTitle: string;
+  readonly roms: readonly string[]; // files the emulator needs in Fightcade's ROMs folder
+  readonly format: FrameFormat; // what the patched emulator reports in its info file
+}
+
+// Garou's format was measured on a real replay (2026-10-15).
+export const GAMES: Readonly<Record<string, Game>> = {
+  sfiii3nr1: {
+    id: 'sfiii3nr1',
+    title: 'Street Fighter III: 3rd Strike',
+    shortTitle: '3rd Strike',
+    roms: ['sfiii3nr1.zip', 'sfiii3.zip'],
+    format: { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 },
+  },
+  garou: {
+    id: 'garou',
+    title: 'Garou: Mark of the Wolves',
+    shortTitle: 'Garou',
+    roms: ['garou.zip', 'neogeo.zip'],
+    format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 },
+  },
+};
+
+// A bare quark ID (no link) is a 3rd Strike replay, as before Garou was supported.
+export const DEFAULT_GAME: Game = GAMES.sfiii3nr1;
+
 // Fightcade's client appends ".7" to the quark ID from the link; without it the stream never loads.
 export const QUARK_SUFFIX = '.7';
 export const STREAM_PORT = 7100;

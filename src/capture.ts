@@ -9,7 +9,7 @@ import { run } from './exec.js';
 import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
-import { streamArg } from './replayRef.js';
+import { streamArg, type ReplayRef } from './replayRef.js';
 import { wineEnv, withoutDisplay } from './winePrefix.js';
 import { fifoTransport, pipeName, pipeTransport, winPath, type VideoTransport } from './transport.js';
 
@@ -46,15 +46,15 @@ export interface CaptureResult {
   endReason: 'ended' | 'max-duration';
 }
 
-export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, quarkId: string): { command: string; args: string[] } {
+export function emulatorCommand(install: FightcadeInstall, runtimeDir: string, ref: ReplayRef): { command: string; args: string[] } {
   const exe = pathFor(install.platform).join(runtimeDir, EMULATOR_EXE);
   if (install.platform === 'linux') {
     // No display: our prefix uses Wine's null display driver and the emulator shows no window while
     // recording. Launched directly, so its exit code comes back.
-    return { command: 'wine', args: [exe, streamArg(quarkId)] };
+    return { command: 'wine', args: [exe, streamArg(ref)] };
   }
-  if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(quarkId)] };
-  return { command: exe, args: [streamArg(quarkId)] };
+  if (install.launcher !== null) return { command: install.launcher, args: [exe, streamArg(ref)] };
+  return { command: exe, args: [streamArg(ref)] };
 }
 
 export function killCommand(install: FightcadeInstall, winePrefix: string | null): { command: string; args: string[]; env?: Record<string, string> } {
@@ -193,7 +193,7 @@ function wrap(child: ReturnType<typeof spawn>, kill: () => Promise<void>): Captu
 export function defaultCaptureDeps(
   install: FightcadeInstall,
   runtimeDir: string,
-  quarkId: string,
+  ref: ReplayRef,
   ffmpeg: string,
   winePrefix: string | null,
 ): CaptureDeps {
@@ -225,7 +225,7 @@ export function defaultCaptureDeps(
       // crashes it. Keep the display awake for as long as this process runs.
       const awake = install.platform === 'darwin' ? spawn('caffeinate', ['-d', '-u', '-w', String(process.pid)], { stdio: 'ignore' }) : null;
       awake?.on('error', () => {});
-      const { command, args } = emulatorCommand(install, runtimeDir, quarkId);
+      const { command, args } = emulatorCommand(install, runtimeDir, ref);
       const options = emulatorSpawnOptions(install, runtimeDir, env, winePrefix);
       const child = spawn(command, args, options);
       child.on('exit', () => {
