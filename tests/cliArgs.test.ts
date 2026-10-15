@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReplayLength, parseCli, parseDuration, prepareMessage } from '../src/cliArgs.js';
+import { formatReplayLength, parseCli, parseDuration, prepareMessage, USAGE } from '../src/cliArgs.js';
 import { ExitCode } from '../src/errors.js';
 import { DEFAULT_MAX_DURATION_MS } from '../src/constants.js';
 
@@ -94,5 +94,12 @@ describe('prepareMessage', () => {
     expect(prepareMessage({ emulatorUpdated: true })).toBe('Ready (emulator downloaded).');
     expect(prepareMessage({ emulatorUpdated: false })).toBe('Ready.');
     expect(prepareMessage({ emulatorUpdated: false, warning: 'Could not check' })).toBeNull();
+  });
+});
+
+describe('USAGE', () => {
+  it('names both games and says a bare quark ID is 3rd Strike', () => {
+    expect(USAGE).toContain('Records a Fightcade replay (3rd Strike or Garou: Mark of the Wolves) to MP4');
+    expect(USAGE).toContain('a quark ID alone means 3rd Strike');
   });
 });

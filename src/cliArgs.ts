@@ -10,7 +10,8 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 serve [--port <n>] [--host <addr>] [--keep <d>] [--fightcade-dir <p>] [-v]
        fc2mp4 reset-admin
 
-Records a Fightcade Street Fighter III: 3rd Strike replay to MP4 (macOS, Windows and Linux).
+Records a Fightcade replay (3rd Strike or Garou: Mark of the Wolves) to MP4 (macOS, Windows and Linux).
+Pass the replay link; a quark ID alone means 3rd Strike.
 
   -o, --output <path>       MP4 file, or an existing folder
                             (default: FC2MP4_OUTPUT_DIR, else ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
