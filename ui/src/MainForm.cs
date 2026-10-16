@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Fc2mp4Ui
@@ -27,6 +29,11 @@ namespace Fc2mp4Ui
         readonly TextBox exe = new TextBox { Dock = DockStyle.Fill };
         readonly TextBox fightcade = new TextBox { Dock = DockStyle.Fill };
         readonly TextBox output = new TextBox { Dock = DockStyle.Fill };
+        readonly Label exeVersionLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
+        readonly LinkLabel downloadLink = new LinkLabel { Text = "Download the latest fc2mp4", AutoSize = true, Anchor = AnchorStyles.Left };
+
+        Version exeVersion;
+        Version latestVersion;
 
         OutputLog log = new OutputLog();
         List<string> stdout = new List<string>();
@@ -59,7 +66,8 @@ namespace Fc2mp4Ui
             runner.StderrLine += line => Post(() => OnStderr(line));
             runner.StdoutLine += line => Post(() => stdout.Add(line));
             runner.Exited += (code, forced) => Post(() => OnExited(code, forced));
-            Shown += (s, e) => { CheckExe(); link.Focus(); };
+            downloadLink.LinkClicked += (s, e) => OpenUrl(UpdateCheck.ReleasesUrl);
+            Shown += (s, e) => { CheckExe(); link.Focus(); _ = CheckForUpdateAsync(); };
             FormClosing += OnClosing;
         }
 
@@ -103,7 +111,12 @@ namespace Fc2mp4Ui
             AddPathRow(grid, 1, "Fightcade folder", fightcade, () => BrowseFolder(fightcade, "Fightcade folder (the one that contains emulator\\fbneo)"));
             AddPathRow(grid, 2, "Output folder", output, () => BrowseFolder(output, "Folder for the videos"));
             var help = new Label { Text = HelpText, AutoSize = true, MaximumSize = new Size(680, 0), ForeColor = SystemColors.GrayText, Padding = new Padding(0, 6, 0, 0) };
-            grid.Controls.Add(help, 0, 3);
+            var versionRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0) };
+            versionRow.Controls.Add(exeVersionLabel);
+            versionRow.Controls.Add(downloadLink);
+            grid.Controls.Add(versionRow, 1, 3);
+            grid.SetColumnSpan(versionRow, 2);
+            grid.Controls.Add(help, 0, 4);
             grid.SetColumnSpan(help, 3);
             group.Controls.Add(grid);
             root.Controls.Add(group);
@@ -140,11 +153,60 @@ namespace Fc2mp4Ui
         {
             if (state.Running) return; // never overwrite the progress or run fc2mp4 --version mid-conversion
             exeReady = false;
-            if (!File.Exists(exe.Text.Trim())) { status.Text = "Choose fc2mp4.exe in Settings"; UpdateButtons(); return; }
-            var verdict = VersionCheck.Evaluate(windowVersion, ConversionRunner.ReadVersion(exe.Text.Trim()));
+            exeVersion = null;
+            if (!File.Exists(exe.Text.Trim()))
+            {
+                status.Text = "Choose fc2mp4.exe in Settings";
+                exeVersionLabel.Text = "";
+                UpdateButtons();
+                return;
+            }
+            string versionOutput = ConversionRunner.ReadVersion(exe.Text.Trim());
+            exeVersion = VersionCheck.Parse(versionOutput);
+            var verdict = VersionCheck.Evaluate(windowVersion, versionOutput);
             exeReady = verdict.Status != VersionStatus.TooOld;
             status.Text = verdict.Status == VersionStatus.Ok ? "Ready" : verdict.Message;
+            ShowVersionInfo();
             UpdateButtons();
+        }
+
+        // The version line under the exe path, and the newer-release notice in the status line
+        // (only over "Ready": a problem message or a running conversion keeps the status).
+        void ShowVersionInfo()
+        {
+            if (File.Exists(exe.Text.Trim())) exeVersionLabel.Text = UpdateCheck.VersionLabel(exeVersion, latestVersion);
+            string notice = UpdateCheck.Notice(latestVersion, exeVersion, windowVersion);
+            if (notice != null && !state.Running && status.Text == "Ready") status.Text = notice;
+        }
+
+        // Asks GitHub for the latest release once, in the background; offline or rate-limited means no notice.
+        async Task CheckForUpdateAsync()
+        {
+            Version latest = await Task.Run(() => FetchLatestVersion());
+            Post(() => { latestVersion = latest; ShowVersionInfo(); });
+        }
+
+        static Version FetchLatestVersion()
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; // GitHub refuses older TLS
+                var request = (HttpWebRequest)WebRequest.Create(UpdateCheck.ApiUrl);
+                request.UserAgent = "fc2mp4-ui"; // required by the GitHub API
+                request.Accept = "application/vnd.github+json";
+                request.Timeout = 5_000;
+                request.ReadWriteTimeout = 5_000;
+                using (var response = request.GetResponse())
+                using (var reader = new StreamReader(response.GetResponseStream()))
+                    return UpdateCheck.ParseLatestTag(reader.ReadToEnd());
+            }
+            catch (Exception) { return null; }
+        }
+
+        void OpenUrl(string url)
+        {
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            catch (Exception e) { status.Text = "Could not open the browser: " + e.Message; }
         }
 
         // Events from fc2mp4 arrive on other threads; once the window is gone they are dropped.
