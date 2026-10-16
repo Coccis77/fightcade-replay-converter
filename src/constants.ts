@@ -14,7 +14,7 @@ export interface Game {
   readonly format: FrameFormat; // what the patched emulator reports in its info file
 }
 
-// Garou's format was measured on a real replay (2026-10-15).
+// Garou's and Super SF2X's formats were measured on real replays (2026-10-15, 2026-10-16).
 export const GAMES: Readonly<Record<string, Game>> = {
   sfiii3nr1: {
     id: 'sfiii3nr1',
@@ -29,6 +29,13 @@ export const GAMES: Readonly<Record<string, Game>> = {
     shortTitle: 'Garou',
     roms: ['garou.zip', 'neogeo.zip'],
     format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 },
+  },
+  ssf2xjr1: {
+    id: 'ssf2xjr1',
+    title: 'Super Street Fighter II X: Grand Master Challenge',
+    shortTitle: 'Super SF2X',
+    roms: ['ssf2xjr1.zip', 'ssf2t.zip'], // ssf2t is its parent in FBNeo (d_cps2.cpp)
+    format: { width: 384, height: 224, bpp: 4, fpsX100: 5963, sampleRate: 44100 },
   },
 };
 

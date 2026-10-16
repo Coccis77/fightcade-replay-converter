@@ -98,8 +98,8 @@ describe('prepareMessage', () => {
 });
 
 describe('USAGE', () => {
-  it('names both games and says a bare quark ID is 3rd Strike', () => {
-    expect(USAGE).toContain('Records a Fightcade replay (3rd Strike or Garou: Mark of the Wolves) to MP4');
+  it('names the games and says a bare quark ID is 3rd Strike', () => {
+    expect(USAGE).toContain('Records a Fightcade replay (3rd Strike, Garou: Mark of the Wolves or Super Street Fighter II X) to MP4');
     expect(USAGE).toContain('a quark ID alone means 3rd Strike');
   });
 });
