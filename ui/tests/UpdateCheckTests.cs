@@ -64,6 +64,24 @@ namespace Fc2mp4Ui.Tests
         }
 
         [Fact]
+        public void HidesTheDownloadLinkWhenEverythingIsUpToDate()
+        {
+            Assert.False(UpdateCheck.ShowDownloadLink(V150, V150, V150, exeUsable: true));
+            Assert.False(UpdateCheck.ShowDownloadLink(V150, V160, V150, exeUsable: true)); // exe newer than the release
+            Assert.False(UpdateCheck.ShowDownloadLink(null, V150, V150, exeUsable: true)); // GitHub not reachable, exe fine
+        }
+
+        [Fact]
+        public void ShowsTheDownloadLinkWhenSomethingIsNewerOrMissing()
+        {
+            Assert.True(UpdateCheck.ShowDownloadLink(V160, V150, V160, exeUsable: true)); // newer fc2mp4.exe
+            Assert.True(UpdateCheck.ShowDownloadLink(V160, V160, V150, exeUsable: true)); // newer window
+            Assert.True(UpdateCheck.ShowDownloadLink(null, null, V150, exeUsable: false)); // no exe chosen
+            Assert.True(UpdateCheck.ShowDownloadLink(null, null, V150, exeUsable: true)); // version unreadable
+            Assert.True(UpdateCheck.ShowDownloadLink(null, new Version(0, 14, 0), V150, exeUsable: false)); // too old for the window
+        }
+
+        [Fact]
         public void ParsesVersionsLikeFc2mp4PrintsThem()
         {
             Assert.Equal(V150, VersionCheck.Parse("0.15.0\r\n"));

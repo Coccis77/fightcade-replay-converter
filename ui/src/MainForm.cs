@@ -158,6 +158,7 @@ namespace Fc2mp4Ui
             {
                 status.Text = "Choose fc2mp4.exe in Settings";
                 exeVersionLabel.Text = "";
+                downloadLink.Visible = true;
                 UpdateButtons();
                 return;
             }
@@ -175,6 +176,7 @@ namespace Fc2mp4Ui
         void ShowVersionInfo()
         {
             if (File.Exists(exe.Text.Trim())) exeVersionLabel.Text = UpdateCheck.VersionLabel(exeVersion, latestVersion);
+            downloadLink.Visible = UpdateCheck.ShowDownloadLink(latestVersion, exeVersion, windowVersion, exeReady);
             string notice = UpdateCheck.Notice(latestVersion, exeVersion, windowVersion);
             if (notice != null && !state.Running && status.Text == "Ready") status.Text = notice;
         }

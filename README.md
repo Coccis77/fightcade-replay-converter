@@ -40,8 +40,8 @@ Windows and macOS need Fightcade 2 installed, with the game opened once.
 Paste the replay link and press **Convert**; the console shows the progress, and **Open video**
 opens the result. The folders (Fightcade, videos) are under **Settings** and are remembered.
 Leave *Fightcade folder* empty unless fc2mp4 does not find Fightcade by itself.
-Settings also shows the version of your `fc2mp4.exe`, says when a newer release is out, and links to
-the download page.
+Settings also shows the version of your `fc2mp4.exe`; when a newer release is out, it says so and links
+to the download page.
 
 **From PowerShell:**
 

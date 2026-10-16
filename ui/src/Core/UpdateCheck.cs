@@ -27,6 +27,14 @@ namespace Fc2mp4Ui
             return label;
         }
 
+        // The download link is only shown when it helps: no usable fc2mp4.exe yet (none chosen, version
+        // unreadable, too old for this window), or a newer release on GitHub.
+        public static bool ShowDownloadLink(Version latest, Version exe, Version window, bool exeUsable)
+        {
+            if (!exeUsable || exe == null) return true;
+            return Notice(latest, exe, window) != null;
+        }
+
         // Null when there is nothing newer (or GitHub could not be reached).
         public static string Notice(Version latest, Version exe, Version window)
         {
