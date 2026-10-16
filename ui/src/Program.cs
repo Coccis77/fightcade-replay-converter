@@ -9,7 +9,8 @@ namespace Fc2mp4Ui
         static void Main()
         {
             Application.EnableVisualStyles();
-            Application.Run(new Form { Text = "fc2mp4" });
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new MainForm());
         }
     }
 }
