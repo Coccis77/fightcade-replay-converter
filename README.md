@@ -22,7 +22,7 @@ Opening the game once in Fightcade downloads its ROMs. Links look like
 - **Windows:** download `fc2mp4.exe` from the latest `v*` release on the
   [releases page](https://github.com/Coccis77/fightcade-replay-converter/releases). Windows may warn
   that it is unsigned: click *More info* → *Run anyway*. ffmpeg and the emulator are downloaded on
-  first use.
+  first use. Also download `fc2mp4-ui.exe` into the same folder for a window instead of PowerShell.
 - **macOS:** download `fc2mp4-macos-arm64`, `chmod +x` it, and install ffmpeg (`brew install ffmpeg`).
 - **Linux (x86_64, headless):** download `fc2mp4-linux-x64`, `chmod +x` it, and install the system
   packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg`.
@@ -34,7 +34,14 @@ Windows and macOS need Fightcade 2 installed, with the game opened once.
 
 ## Usage
 
-### Windows (PowerShell)
+### Windows
+
+**The easy way:** put `fc2mp4.exe` and `fc2mp4-ui.exe` in the same folder and open `fc2mp4-ui.exe`.
+Paste the replay link and press **Convert**; the console shows the progress, and **Open video**
+opens the result. The folders (Fightcade, videos) are under **Settings** and are remembered.
+Leave *Fightcade folder* empty unless fc2mp4 does not find Fightcade by itself.
+
+**From PowerShell:**
 
 Open PowerShell in the folder where you saved `fc2mp4.exe`: in Explorer, right-click an empty spot in
 that folder → *Open in Terminal* (Windows 11), or *Shift + right-click* → *Open PowerShell window here*
