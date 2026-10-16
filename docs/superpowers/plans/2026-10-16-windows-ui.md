@@ -1476,7 +1476,7 @@ This task needs the user (Windows) and outward-facing pushes: ask before each pu
 
 - [ ] **Step 2: The user runs the manual checks on Windows**, with both exes in one folder:
   1. Open `fc2mp4-ui.exe`: the exe path is pre-filled, status "Ready" (a branch build reports version 0.14.0 from package.json until the bump in Step 3, which is fine since both match).
-  2. Paste `https://replay.fightcade.com/fbneo/sfa3/1792152118748-6544`, press Enter: the console fills, the progress line updates in place, "Done: …mp4", Open video plays it, Open folder selects it.
+  2. Paste `https://replay.fightcade.com/fbneo/sfa3/1792152118748-6544`, press Enter: the console fills, the progress line updates in place, "Done: …mp4", Open video plays it, Open folder selects it. Task Manager no longer shows `fc2mp4.exe` once "Done" appears (it must exit although the window holds its stdin). The window's controls fill its width (link field and console not narrow).
   3. Convert it again and press Cancel during "Capturing…": "Cancelled" within a few seconds; Task Manager shows no `fcadefbneo-fc2mp4.exe`, `ffmpeg.exe` or `fc2mp4.exe`.
   4. Convert again and close the window during capture: "Stop the conversion?" → Yes; the window closes; Task Manager shows none of the three.
   5. Set a Fightcade folder with a space in its path (or `C:\Fightcade\` with a trailing `\`) and convert: it works.

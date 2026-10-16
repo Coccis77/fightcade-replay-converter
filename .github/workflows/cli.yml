@@ -37,6 +37,9 @@ jobs:
       - name: Real Windows named-pipe test
         if: runner.os == 'Windows'
         run: npx vitest run tests/transport.test.ts -t pipeTransport
+      - name: Stopping on stdin close, and exiting while stdin stays open (Windows pipes)
+        if: runner.os == 'Windows'
+        run: npx vitest run tests/signals.test.ts
       - run: npm run bundle
       - run: npm run sea
       - name: Smoke test

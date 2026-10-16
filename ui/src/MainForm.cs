@@ -14,6 +14,8 @@ namespace Fc2mp4Ui
         readonly string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "fc2mp4-ui", "settings.txt");
         readonly Version windowVersion = typeof(MainForm).Assembly.GetName().Version;
         readonly ConversionRunner runner = new ConversionRunner();
+        readonly RunState state = new RunState();
+        readonly List<Button> browseButtons = new List<Button>();
 
         readonly TextBox link = new TextBox { Dock = DockStyle.Fill };
         readonly Button convert = new Button { Text = "Convert", AutoSize = true };
@@ -30,7 +32,6 @@ namespace Fc2mp4Ui
         List<string> stdout = new List<string>();
         List<string> stderr = new List<string>();
         bool exeReady;
-        bool closeWhenStopped;
         string videoPath;
 
         public MainForm()
@@ -50,14 +51,14 @@ namespace Fc2mp4Ui
 
             AcceptButton = convert;
             link.TextChanged += (s, e) => UpdateButtons();
-            exe.Leave += (s, e) => CheckExe();
+            exe.Leave += (s, e) => { if (!state.Running) CheckExe(); };
             convert.Click += (s, e) => StartConversion();
-            cancel.Click += async (s, e) => { status.Text = "Stopping…"; cancel.Enabled = false; await runner.CancelAsync(); };
+            cancel.Click += async (s, e) => await StopAsync();
             openVideo.Click += (s, e) => { if (videoPath != null) Process.Start(new ProcessStartInfo(videoPath) { UseShellExecute = true }); };
             openFolder.Click += (s, e) => { if (videoPath != null) Process.Start("explorer.exe", "/select," + WindowsArgs.Quote(videoPath)); };
-            runner.StderrLine += line => BeginInvoke(new Action(() => OnStderr(line)));
-            runner.StdoutLine += line => BeginInvoke(new Action(() => stdout.Add(line)));
-            runner.Exited += (code, forced) => BeginInvoke(new Action(() => OnExited(code, forced)));
+            runner.StderrLine += line => Post(() => OnStderr(line));
+            runner.StdoutLine += line => Post(() => stdout.Add(line));
+            runner.Exited += (code, forced) => Post(() => OnExited(code, forced));
             Shown += (s, e) => { CheckExe(); link.Focus(); };
             FormClosing += OnClosing;
         }
@@ -65,6 +66,7 @@ namespace Fc2mp4Ui
         void BuildLayout()
         {
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, Padding = new Padding(10) };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // the only column fills the window
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // link
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // buttons
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // status
@@ -109,12 +111,13 @@ namespace Fc2mp4Ui
             Controls.Add(root);
         }
 
-        static void AddPathRow(TableLayoutPanel grid, int row, string label, TextBox box, Action browse)
+        void AddPathRow(TableLayoutPanel grid, int row, string label, TextBox box, Action browse)
         {
             grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
             grid.Controls.Add(box, 1, row);
             var button = new Button { Text = "Browse…", AutoSize = true };
             button.Click += (s, e) => browse();
+            browseButtons.Add(button);
             grid.Controls.Add(button, 2, row);
         }
 
@@ -135,6 +138,7 @@ namespace Fc2mp4Ui
 
         void CheckExe()
         {
+            if (state.Running) return; // never overwrite the progress or run fc2mp4 --version mid-conversion
             exeReady = false;
             if (!File.Exists(exe.Text.Trim())) { status.Text = "Choose fc2mp4.exe in Settings"; UpdateButtons(); return; }
             var verdict = VersionCheck.Evaluate(windowVersion, ConversionRunner.ReadVersion(exe.Text.Trim()));
@@ -143,12 +147,29 @@ namespace Fc2mp4Ui
             UpdateButtons();
         }
 
+        // Events from fc2mp4 arrive on other threads; once the window is gone they are dropped.
+        void Post(Action action)
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try { BeginInvoke(action); }
+            catch (InvalidOperationException) { } // includes ObjectDisposedException
+        }
+
         void UpdateButtons()
         {
-            bool running = runner.Running;
+            bool running = state.Running;
             convert.Enabled = exeReady && !running && link.Text.Trim().Length > 0;
-            cancel.Enabled = running;
+            cancel.Enabled = running && !state.Stopping;
             foreach (var box in new[] { link, exe, fightcade, output }) box.ReadOnly = running;
+            foreach (var button in browseButtons) button.Enabled = !running;
+        }
+
+        async System.Threading.Tasks.Task StopAsync()
+        {
+            if (!state.CancelRequested()) return;
+            status.Text = "Stopping…";
+            UpdateButtons();
+            await runner.CancelAsync();
         }
 
         Settings CurrentSettings() => new Settings { Exe = exe.Text.Trim(), FightcadeFolder = fightcade.Text.Trim(), OutputFolder = output.Text.Trim() };
@@ -179,6 +200,7 @@ namespace Fc2mp4Ui
                 status.Text = "Failed: could not start fc2mp4.exe: " + e.Message;
                 return;
             }
+            state.Started();
             status.Text = "Starting…";
             UpdateButtons();
         }
@@ -190,28 +212,30 @@ namespace Fc2mp4Ui
             console.Text = log.Text;
             console.SelectionStart = console.TextLength;
             console.ScrollToCaret();
-            if (log.Progress != null && line == log.Progress) status.Text = line;
+            if (state.ShowsProgress && log.Progress != null && line == log.Progress) status.Text = line;
         }
 
         void OnExited(int code, bool forced)
         {
+            bool close = state.Finished();
             var outcome = RunOutcome.From(code, forced, stdout, stderr);
             status.Text = outcome.Message;
             videoPath = outcome.Kind == OutcomeKind.Done ? outcome.VideoPath : null;
             openVideo.Enabled = openFolder.Enabled = videoPath != null && File.Exists(videoPath);
             UpdateButtons();
-            if (closeWhenStopped) Close();
+            if (close) Close();
         }
 
         async void OnClosing(object sender, FormClosingEventArgs e)
         {
-            if (!runner.Running) { SaveSettings(); return; }
+            CloseAction action = state.CloseRequested();
+            if (action == CloseAction.CloseNow) { SaveSettings(); return; }
             e.Cancel = true;
-            if (closeWhenStopped) return; // already stopping
+            if (action == CloseAction.Wait) return; // already stopping, closes when fc2mp4 has exited
             if (MessageBox.Show(this, "Stop the conversion?", "fc2mp4", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            closeWhenStopped = true;
+            if (!state.CloseConfirmed()) { Post(Close); return; } // fc2mp4 finished while the question was open
             status.Text = "Stopping…";
-            cancel.Enabled = false;
+            UpdateButtons();
             await runner.CancelAsync();
         }
     }
