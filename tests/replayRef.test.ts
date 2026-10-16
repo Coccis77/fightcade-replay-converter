@@ -30,6 +30,10 @@ describe('parseReplayRef', () => {
     expect(parseReplayRef(input)).toEqual({ game: GAMES.garou, quarkId: ID });
   });
 
+  it('reads a Vampire Savior link', () => {
+    expect(parseReplayRef(`https://replay.fightcade.com/fbneo/vsavj/${ID}`)).toEqual({ game: GAMES.vsavj, quarkId: ID });
+  });
+
   it('reads an Alpha 3 link', () => {
     expect(parseReplayRef(`https://replay.fightcade.com/fbneo/sfa3/${ID}`)).toEqual({ game: GAMES.sfa3, quarkId: ID });
   });
@@ -48,7 +52,7 @@ describe('parseReplayRef', () => {
     expect(error).toBeInstanceOf(ConvertError);
     expect(error).toMatchObject({
       exitCode: ExitCode.Usage,
-      message: `Unsupported game "${game}": supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X), sfa3 (Alpha 3)`,
+      message: `Unsupported game "${game}": supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X), sfa3 (Alpha 3), vsavj (Vampire Savior)`,
     });
   });
 
@@ -68,6 +72,11 @@ describe('GAMES', () => {
   it('holds the measured formats and required ROMs', () => {
     expect(GAMES.sfiii3nr1).toMatchObject({ roms: ['sfiii3nr1.zip', 'sfiii3.zip'], format: { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 } });
     expect(GAMES.garou).toMatchObject({ roms: ['garou.zip', 'neogeo.zip'], format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 } });
+    expect(GAMES.vsavj).toMatchObject({
+      title: 'Vampire Savior: The Lord of Vampire',
+      roms: ['vsavj.zip', 'vsav.zip'],
+      format: { width: 384, height: 224, bpp: 4, fpsX100: 5963, sampleRate: 44100 },
+    });
     expect(GAMES.sfa3).toMatchObject({
       title: 'Street Fighter Alpha 3',
       roms: ['sfa3.zip'],

@@ -14,7 +14,7 @@ export interface Game {
   readonly format: FrameFormat; // what the patched emulator reports in its info file
 }
 
-// Formats other than 3rd Strike's were measured on real replays (Garou 2026-10-15, Super SF2X and Alpha 3 2026-10-16).
+// Formats other than 3rd Strike's were measured on real replays (Garou 2026-10-15, the CPS2 games 2026-10-16).
 export const GAMES: Readonly<Record<string, Game>> = {
   sfiii3nr1: {
     id: 'sfiii3nr1',
@@ -42,6 +42,13 @@ export const GAMES: Readonly<Record<string, Game>> = {
     title: 'Street Fighter Alpha 3',
     shortTitle: 'Alpha 3',
     roms: ['sfa3.zip'], // no parent or BIOS in FBNeo (d_cps2.cpp)
+    format: { width: 384, height: 224, bpp: 4, fpsX100: 5963, sampleRate: 44100 },
+  },
+  vsavj: {
+    id: 'vsavj',
+    title: 'Vampire Savior: The Lord of Vampire',
+    shortTitle: 'Vampire Savior',
+    roms: ['vsavj.zip', 'vsav.zip'], // vsav is its parent in FBNeo (d_cps2.cpp)
     format: { width: 384, height: 224, bpp: 4, fpsX100: 5963, sampleRate: 44100 },
   },
 };

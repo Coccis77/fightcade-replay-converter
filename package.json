@@ -1,7 +1,7 @@
 {
   "name": "fc2mp4",
   "version": "0.13.0",
-  "description": "Convert Fightcade replays (3rd Strike, Garou: Mark of the Wolves, Super Street Fighter II X, Street Fighter Alpha 3) to MP4",
+  "description": "Convert Fightcade replays (3rd Strike, Garou: Mark of the Wolves, Super Street Fighter II X, Street Fighter Alpha 3, Vampire Savior) to MP4",
   "type": "module",
   "bin": {
     "fc2mp4": "dist/cli.js"

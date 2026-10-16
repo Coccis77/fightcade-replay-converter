@@ -1,7 +1,8 @@
 # fc2mp4
 
 Turns a Fightcade **Street Fighter III: 3rd Strike**, **Garou: Mark of the Wolves**,
-**Super Street Fighter II X: Grand Master Challenge** or **Street Fighter Alpha 3** replay into an MP4 (1440×1080, H.264/AAC),
+**Super Street Fighter II X: Grand Master Challenge**, **Street Fighter Alpha 3** or
+**Vampire Savior** replay into an MP4 (1440×1080, H.264/AAC),
 faster than real time. Windows, macOS and Linux. Free and non-commercial.
 
 ## Install
@@ -16,7 +17,8 @@ faster than real time. Windows, macOS and Linux. Free and non-commercial.
   Point it at Fightcade's files with `--fightcade-dir` (or `FC2MP4_FIGHTCADE_DIR`): either a Fightcade
   folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and the game's ROMs:
   `ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip` (3rd Strike), `ROMs/garou.zip` + `ROMs/neogeo.zip` (Garou),
-  `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` (Super SF2X), `ROMs/sfa3.zip` (Alpha 3).
+  `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` (Super SF2X), `ROMs/sfa3.zip` (Alpha 3),
+  `ROMs/vsavj.zip` + `ROMs/vsav.zip` (Vampire Savior).
   No screen or sound device is needed.
 
 ## Usage
@@ -26,7 +28,7 @@ fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234
 ```
 
 The other games work the same way: `fc2mp4 https://replay.fightcade.com/fbneo/garou/<id>`,
-`…/fbneo/ssf2xjr1/<id>` or `…/fbneo/sfa3/<id>`. A quark ID alone (`1700000000000-1234`) is read as 3rd Strike.
+`…/fbneo/ssf2xjr1/<id>`, `…/fbneo/sfa3/<id>` or `…/fbneo/vsavj/<id>`. A quark ID alone (`1700000000000-1234`) is read as 3rd Strike.
 
 Videos go to `~/Movies/Fightcade` (macOS), `%USERPROFILE%\Videos\Fightcade` (Windows) or `~/Videos/Fightcade` (Linux); use `-o`
 for another file or folder. `--help` lists all options.
@@ -97,7 +99,7 @@ docker run -d --name fc2mp4 --restart unless-stopped \
 ```
 
 `/srv/fc2mp4/fightcade` holds a copy of Fightcade's `emulator/fbneo` folder: its DLLs (`ggponet.dll`…) and
-`ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip` for 3rd Strike, `ROMs/garou.zip` + `ROMs/neogeo.zip` for Garou, `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` for Super SF2X, `ROMs/sfa3.zip` for Alpha 3 (only the
+`ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip` for 3rd Strike, `ROMs/garou.zip` + `ROMs/neogeo.zip` for Garou, `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` for Super SF2X, `ROMs/sfa3.zip` for Alpha 3, `ROMs/vsavj.zip` + `ROMs/vsav.zip` for Vampire Savior (only the
 games you want to offer). Set `TZ` to your time zone (the daily limits reset at midnight).
 
 `FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through the web server in front, so it uses
