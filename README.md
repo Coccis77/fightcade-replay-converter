@@ -226,3 +226,10 @@ npm test && npm run test:emulator
 `fc2mp4 rebuild-emulator` builds the emulator locally instead of downloading it (macOS, from a
 source checkout, `brew install mingw-w64 git`). `npm run bundle && npm run sea` builds the single
 executable for the current OS.
+
+## License
+
+fc2mp4 is free for non-commercial use: you may use, modify and share it, but not sell it or make money
+from it. Changes you make must be made public. See [LICENSE](LICENSE); its terms are adapted from the
+FB Neo license. The emulator fc2mp4 downloads is Fightcade's FB Neo, under the
+[FB Neo license](https://github.com/finalburnneo/FBNeo/blob/master/src/license.txt).

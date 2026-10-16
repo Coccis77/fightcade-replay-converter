@@ -46,8 +46,10 @@ jobs:
       - name: Publish
         if: steps.tag.outputs.exists == 'false'
         run: |
+          # FB Neo's license must travel, verbatim, with every copy of the emulator.
+          cp "$RUNNER_TEMP/fightcade-fbneo/src/license.txt" "$RUNNER_TEMP/out/FBNeo-license.txt"
           gh release create "${{ steps.tag.outputs.tag }}" \
-            "$RUNNER_TEMP/out/fcadefbneo-fc2mp4.exe" "$RUNNER_TEMP/out/build-info.json" \
+            "$RUNNER_TEMP/out/fcadefbneo-fc2mp4.exe" "$RUNNER_TEMP/out/build-info.json" "$RUNNER_TEMP/out/FBNeo-license.txt" \
             --title "Emulator ${{ steps.tag.outputs.tag }}" \
             --latest=false \
             --notes "Patched Fightcade FBNeo (github.com/fightcadeorg/fightcade-fbneo) built by CI. Downloaded automatically by fc2mp4."

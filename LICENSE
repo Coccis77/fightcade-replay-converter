@@ -1,0 +1,26 @@
+fc2mp4 license
+
+Copyright (c) 2026 Coccis (https://github.com/Coccis77/fightcade-replay-converter)
+
+You may freely use, modify, and distribute both the fc2mp4 source code and binaries, however the
+following restrictions apply:
+
+ - You may not sell, lease, rent or otherwise seek to gain monetary profit from fc2mp4;
+ - You must make public any changes you make to the source code;
+ - You must include, verbatim, the full text of this license;
+ - You may not distribute fc2mp4 with ROM images unless you have the legal right to distribute them;
+ - You may not ask for donations to support your work on any project that uses the fc2mp4 source code.
+
+These terms are adapted from the FB Neo license.
+
+fc2mp4 downloads and runs a patched build of Fightcade's FB Neo emulator
+(https://github.com/fightcadeorg/fightcade-fbneo). That emulator, and the patches to it in the
+emulator/ folder, are also subject to the FB Neo license
+(https://github.com/finalburnneo/FBNeo/blob/master/src/license.txt) and, through FB Neo, to the MAME
+license.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
