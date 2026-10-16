@@ -23,12 +23,19 @@ export function videoEncodeArgs({ input, output, scale, format }: { input: strin
   ];
 }
 
-export function muxArgs({ video, audio, output, sampleRate }: { video: string; audio: string; output: string; sampleRate: number }): string[] {
+// The emulator writes a whole number of samples per frame (rounded as in fc2mp4_headless.cpp), so the
+// audio really runs at samples-per-frame x fps. Read at the nominal rate it drifts from the video.
+export function audioInputRate(format: FrameFormat): number {
+  const samplesPerFrame = Math.floor((format.sampleRate * 100 + (format.fpsX100 >> 1)) / format.fpsX100);
+  return Math.round((samplesPerFrame * format.fpsX100) / 100);
+}
+
+export function muxArgs({ video, audio, output, format }: { video: string; audio: string; output: string; format: FrameFormat }): string[] {
   return [
     '-hide_banner', '-nostats', '-y',
     '-i', video,
-    '-f', 's16le', '-ar', String(sampleRate), '-ac', '2', '-i', audio,
-    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-f', 's16le', '-ar', String(audioInputRate(format)), '-ac', '2', '-i', audio,
+    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', String(format.sampleRate),
     '-movflags', '+faststart', output,
   ];
 }
@@ -77,10 +84,10 @@ export function runFfmpeg(args: string[], ffmpeg = 'ffmpeg'): Promise<void> {
   });
 }
 
-export async function mux(args: { video: string; audio: string; output: string; sampleRate: number }, ffmpeg = 'ffmpeg'): Promise<void> {
+export async function mux(args: { video: string; audio: string; output: string; format: FrameFormat }, ffmpeg = 'ffmpeg'): Promise<void> {
   const part = partPath(args.output);
   try {
-    await runFfmpeg(muxArgs({ video: args.video, audio: args.audio, output: part, sampleRate: args.sampleRate }), ffmpeg);
+    await runFfmpeg(muxArgs({ video: args.video, audio: args.audio, output: part, format: args.format }), ffmpeg);
     await rename(part, args.output);
   } catch (err) {
     await rm(part, { force: true });

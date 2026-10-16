@@ -57,8 +57,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
     mkdir: async (dir) => {
       calls.push(`mkdir:${dir}`);
     },
-    mux: async ({ output, sampleRate }) => {
-      calls.push(`mux:${output}:${sampleRate}`);
+    mux: async ({ output, format }) => {
+      calls.push(`mux:${output}:${format.fpsX100}`);
     },
     removeDir: async (dir) => {
       calls.push(`rmdir:${dir}`);
@@ -75,7 +75,7 @@ describe('convert', () => {
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
       'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run:384`,
-      'mkdir:/out', `mux:/out/${ID}.mp4:44100`, 'rmdir:/tmp/run', 'unlock',
+      'mkdir:/out', `mux:/out/${ID}.mp4:5959`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
 

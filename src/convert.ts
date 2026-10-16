@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
-import type { Game } from './constants.js';
+import type { FrameFormat, Game } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
@@ -60,7 +60,7 @@ export interface ConvertDeps {
   makeTempDir(): Promise<string>;
   capture(install: FightcadeInstall, ref: ReplayRef, ffmpeg: string, opts: CaptureOptions): Promise<CaptureResult>;
   mkdir(dir: string): Promise<void>;
-  mux(args: { video: string; audio: string; output: string; sampleRate: number }, ffmpeg: string): Promise<void>;
+  mux(args: { video: string; audio: string; output: string; format: FrameFormat }, ffmpeg: string): Promise<void>;
   removeDir(dir: string): Promise<void>;
 }
 
@@ -162,7 +162,7 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
 
     options.onProgress?.({ phase: 'finalizing' });
     await deps.mkdir(dirname(output));
-    await deps.mux({ video: captured.video, audio: captured.audio, output, sampleRate: format.sampleRate }, ffmpeg);
+    await deps.mux({ video: captured.video, audio: captured.audio, output, format }, ffmpeg);
     return { output, frames: captured.frames, seconds: seconds(captured.frames), endReason: captured.endReason };
   } catch (err) {
     // After Ctrl-C, whatever failed next (a download, ffmpeg, the mux) is an interruption.

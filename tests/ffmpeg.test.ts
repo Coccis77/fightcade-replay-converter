@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { checkInfo, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, videoEncodeArgs } from '../src/ffmpeg.js';
+import { audioInputRate, checkInfo, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
 import { GAMES } from '../src/constants.js';
@@ -31,14 +31,22 @@ describe('ffmpeg arguments', () => {
     expect(args.slice(args.indexOf('-s'), args.indexOf('-s') + 4)).toEqual(['-s', '320x224', '-r', '59.18']);
   });
 
-  it('muxes the video with the raw audio', () => {
-    expect(muxArgs({ video: '/t/video.mp4', audio: '/t/audio.raw', output: '/o/x.part.mp4', sampleRate: 44100 })).toEqual([
+  it('muxes the video with the raw audio read at its real rate, resampled to the nominal one', () => {
+    expect(muxArgs({ video: '/t/video.mp4', audio: '/t/audio.raw', output: '/o/x.part.mp4', format: SF3 })).toEqual([
       '-hide_banner', '-nostats', '-y',
       '-i', '/t/video.mp4',
-      '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', '/t/audio.raw',
-      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+      '-f', 's16le', '-ar', '44097', '-ac', '2', '-i', '/t/audio.raw',
+      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100',
       '-movflags', '+faststart', '/o/x.part.mp4',
     ]);
+  });
+
+  // The emulator writes a whole number of samples per frame, so the audio's real rate is
+  // samples-per-frame x fps, not the nominal 44100 Hz (0.17 s drift over 5 minutes of Super SF2X).
+  it('derives the real audio rate from the emulator samples per frame', () => {
+    expect(audioInputRate(SF3)).toBe(44097); // 740 samples x 59.59 fps
+    expect(audioInputRate(GAMES.garou.format)).toBe(44089); // 745 x 59.18
+    expect(audioInputRate({ ...SF3, fpsX100: 5963 })).toBe(44126); // 740 x 59.63 (CPS2)
   });
 
   it('reads the last frame count from progress output', () => {
@@ -98,7 +106,7 @@ describe.skipIf(!hasFfmpeg)('encode + mux (real ffmpeg)', () => {
     const videoMp4 = join(dir, 'video.mp4');
     const output = join(dir, 'out.mp4');
     await runFfmpeg(videoEncodeArgs({ input: raw.video, output: videoMp4, scale: 'sharp', format: SF3 }));
-    await mux({ video: videoMp4, audio: raw.audio, output, sampleRate: 44100 });
+    await mux({ video: videoMp4, audio: raw.audio, output, format: SF3 });
 
     const { stdout } = await exec('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,duration', '-of', 'json', output]);
     const streams = (JSON.parse(stdout) as { streams: Record<string, string | number>[] }).streams;
@@ -114,7 +122,7 @@ describe.skipIf(!hasFfmpeg)('encode + mux (real ffmpeg)', () => {
     const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-ff-'));
     const output = join(dir, 'out.mp4');
     await writeFile(output, 'OLD VIDEO');
-    await expect(mux({ video: join(dir, 'missing.mp4'), audio: join(dir, 'missing.raw'), output, sampleRate: 44100 })).rejects.toMatchObject({ exitCode: ExitCode.Encode });
+    await expect(mux({ video: join(dir, 'missing.mp4'), audio: join(dir, 'missing.raw'), output, format: SF3 })).rejects.toMatchObject({ exitCode: ExitCode.Encode });
     expect(await readFile(output, 'utf8')).toBe('OLD VIDEO');
     expect(await pathExists(partPath(output))).toBe(false);
   }, 60_000);
