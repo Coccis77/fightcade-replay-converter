@@ -1,37 +1,93 @@
 # fc2mp4
 
-Turns a Fightcade **Street Fighter III: 3rd Strike**, **Garou: Mark of the Wolves**,
-**Super Street Fighter II X: Grand Master Challenge**, **Street Fighter Alpha 3** or
-**Vampire Savior** replay into an MP4 (1440×1080, H.264/AAC),
-faster than real time. Windows, macOS and Linux. Free and non-commercial.
+Turns a Fightcade replay into an MP4 (1440×1080, H.264/AAC), faster than real time. Windows, macOS
+and Linux. Free and non-commercial.
+
+## Supported games
+
+| Game | Name in the replay link | ROMs needed in Fightcade's `ROMs` folder |
+| --- | --- | --- |
+| Street Fighter III: 3rd Strike | `sfiii3nr1` | `sfiii3nr1.zip`, `sfiii3.zip` |
+| Garou: Mark of the Wolves | `garou` | `garou.zip`, `neogeo.zip` |
+| Super Street Fighter II X: Grand Master Challenge | `ssf2xjr1` | `ssf2xjr1.zip`, `ssf2t.zip` |
+| Street Fighter Alpha 3 | `sfa3` | `sfa3.zip` |
+| Vampire Savior: The Lord of Vampire | `vsavj` | `vsavj.zip`, `vsav.zip` |
+
+Opening the game once in Fightcade downloads its ROMs. Links look like
+`https://replay.fightcade.com/fbneo/<name>/<id>`. A quark ID alone (`1700000000000-1234`) is read as
+3rd Strike.
 
 ## Install
 
 - **Windows:** download `fc2mp4.exe` from the latest `v*` release on the
   [releases page](https://github.com/Coccis77/fightcade-replay-converter/releases). Windows may warn
-  that it is unsigned: click *More info* → *Run anyway*. Needs Fightcade 2 with the game opened once.
+  that it is unsigned: click *More info* → *Run anyway*. ffmpeg and the emulator are downloaded on
+  first use.
 - **macOS:** download `fc2mp4-macos-arm64`, `chmod +x` it, and install ffmpeg (`brew install ffmpeg`).
-  Needs Fightcade 2 with the game opened once.
 - **Linux (x86_64, headless):** download `fc2mp4-linux-x64`, `chmod +x` it, and install the system
   packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg`.
   Point it at Fightcade's files with `--fightcade-dir` (or `FC2MP4_FIGHTCADE_DIR`): either a Fightcade
-  folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and the game's ROMs:
-  `ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip` (3rd Strike), `ROMs/garou.zip` + `ROMs/neogeo.zip` (Garou),
-  `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` (Super SF2X), `ROMs/sfa3.zip` (Alpha 3),
-  `ROMs/vsavj.zip` + `ROMs/vsav.zip` (Vampire Savior).
-  No screen or sound device is needed.
+  folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and the game's ROMs in
+  `ROMs/` (see [Supported games](#supported-games)). No screen or sound device is needed.
+
+Windows and macOS need Fightcade 2 installed, with the game opened once.
 
 ## Usage
 
-```sh
-fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234
+### Windows (PowerShell)
+
+Open PowerShell in the folder where you saved `fc2mp4.exe`: in Explorer, right-click an empty spot in
+that folder → *Open in Terminal* (Windows 11), or *Shift + right-click* → *Open PowerShell window here*
+(Windows 10). Then:
+
+```powershell
+.\fc2mp4.exe "https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234"
 ```
 
-The other games work the same way: `fc2mp4 https://replay.fightcade.com/fbneo/garou/<id>`,
-`…/fbneo/ssf2xjr1/<id>`, `…/fbneo/sfa3/<id>` or `…/fbneo/vsavj/<id>`. A quark ID alone (`1700000000000-1234`) is read as 3rd Strike.
+PowerShell needs the `.\` in front of `fc2mp4.exe`, and the link in quotes. The video goes to
+`Videos\Fightcade` in your user folder.
 
-Videos go to `~/Movies/Fightcade` (macOS), `%USERPROFILE%\Videos\Fightcade` (Windows) or `~/Videos/Fightcade` (Linux); use `-o`
-for another file or folder. `--help` lists all options.
+fc2mp4 looks for Fightcade in `Documents\Fightcade` (also under OneDrive), `%USERPROFILE%\Fightcade`,
+`C:\Fightcade` and `%LOCALAPPDATA%\Programs\Fightcade`. If yours is elsewhere, pass the Fightcade
+folder (the one that contains `emulator\fbneo\fcadefbneo.exe`) with `--fightcade-dir`:
+
+```powershell
+.\fc2mp4.exe "https://replay.fightcade.com/fbneo/garou/1791766846976-7757" --fightcade-dir "D:\Games\Fightcade"
+```
+
+To choose where the video goes, add `-o` with a folder or a file name:
+
+```powershell
+.\fc2mp4.exe "https://replay.fightcade.com/fbneo/sfa3/1792152118748-6544" --fightcade-dir "D:\Games\Fightcade" -o "$HOME\Desktop\alpha3.mp4"
+```
+
+Keep the quotes around paths that contain spaces, and don't end a path with `\` (`"D:\Games\Fightcade\"`
+breaks the command).
+
+### macOS
+
+```sh
+./fc2mp4-macos-arm64 https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234
+```
+
+fc2mp4 finds `FightCade2.app` in `/Applications` or `~/Applications`; otherwise add
+`--fightcade-dir "/path/to/FightCade2.app"`. Videos go to `~/Movies/Fightcade`.
+
+### Linux
+
+```sh
+./fc2mp4-linux-x64 https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234 --fightcade-dir /srv/fightcade
+```
+
+Videos go to `~/Videos/Fightcade`.
+
+### Options
+
+- `-o <file or folder>`: where to write the MP4 (default: the folder above, or `FC2MP4_OUTPUT_DIR`).
+- `--fightcade-dir <path>`: where Fightcade is, when it is not found by itself.
+- `--scale sharp|smooth`: upscaling style (default `sharp`).
+- `--max-duration <d>`: stop after this long, e.g. `90s`, `45m`, `1h` (default `60m`).
+- `-v`: print debug details. `--help` lists every command and option.
 
 ## Docker
 
@@ -99,8 +155,8 @@ docker run -d --name fc2mp4 --restart unless-stopped \
 ```
 
 `/srv/fc2mp4/fightcade` holds a copy of Fightcade's `emulator/fbneo` folder: its DLLs (`ggponet.dll`…) and
-`ROMs/sfiii3nr1.zip` + `ROMs/sfiii3.zip` for 3rd Strike, `ROMs/garou.zip` + `ROMs/neogeo.zip` for Garou, `ROMs/ssf2xjr1.zip` + `ROMs/ssf2t.zip` for Super SF2X, `ROMs/sfa3.zip` for Alpha 3, `ROMs/vsavj.zip` + `ROMs/vsav.zip` for Vampire Savior (only the
-games you want to offer). Set `TZ` to your time zone (the daily limits reset at midnight).
+the ROMs of the games you want to offer in `ROMs/` (see [Supported games](#supported-games)). Set `TZ` to
+your time zone (the daily limits reset at midnight).
 
 `FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through the web server in front, so it uses
 the visitor's address for the login limit and knows when the connection is HTTPS (secure cookie). Only set
