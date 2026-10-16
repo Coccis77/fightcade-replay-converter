@@ -19,6 +19,7 @@ Pass the replay link; a quark ID alone means 3rd Strike.
       --max-duration <d>    Stop capturing after this long: 90s, 45m, 1h (default: 60m)
       --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows;
                             on Linux a Fightcade folder or its emulator/fbneo folder, also FC2MP4_FIGHTCADE_DIR)
+      --stop-on-stdin-close Stop cleanly when standard input closes (for programs that run fc2mp4)
   -v, --verbose             Print debug details
   -h, --help                Show this help
 
@@ -31,7 +32,7 @@ reset-admin removes the web page's admin account (the output folder's fc2mp4-dat
 
 export type CliRequest =
   | { command: 'help' }
-  | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; verbose: boolean }
+  | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; stopOnStdinClose: boolean; verbose: boolean }
   | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
   | { command: 'prepare'; verbose: boolean }
   | { command: 'reset-admin'; verbose: boolean }
@@ -72,6 +73,7 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
         scale: { type: 'string' },
         'max-duration': { type: 'string' },
         'fightcade-dir': { type: 'string' },
+        'stop-on-stdin-close': { type: 'boolean' },
         port: { type: 'string' },
         host: { type: 'string' },
         keep: { type: 'string' },
@@ -87,6 +89,10 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
   const verbose = values.verbose ?? false;
 
   const command = positionals[0];
+  const nonConvert = ['reset-admin', 'prepare', 'serve', 'update-emulator', 'rebuild-emulator'];
+  if (values['stop-on-stdin-close'] && command !== undefined && nonConvert.includes(command)) {
+    throw usage('--stop-on-stdin-close only works when converting a replay');
+  }
   if (command === 'reset-admin') {
     if (positionals.length !== 1) throw usage('reset-admin takes no arguments');
     return { command, verbose };
@@ -124,6 +130,7 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
     scale,
     maxDurationMs: values['max-duration'] ? parseDuration(values['max-duration']) : DEFAULT_MAX_DURATION_MS,
     fightcadeDir: values['fightcade-dir'],
+    stopOnStdinClose: values['stop-on-stdin-close'] ?? false,
     verbose,
   };
 }

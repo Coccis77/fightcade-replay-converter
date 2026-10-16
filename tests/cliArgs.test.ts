@@ -37,6 +37,7 @@ describe('parseCli', () => {
       scale: 'sharp',
       maxDurationMs: DEFAULT_MAX_DURATION_MS,
       fightcadeDir: undefined,
+      stopOnStdinClose: false,
       verbose: false,
     });
   });
@@ -48,8 +49,17 @@ describe('parseCli', () => {
       scale: 'smooth',
       maxDurationMs: 1_200_000,
       fightcadeDir: '/F',
+      stopOnStdinClose: false,
       verbose: true,
     });
+  });
+  it('reads --stop-on-stdin-close for a conversion only', () => {
+    expect(parseCli(['1-2', '--stop-on-stdin-close'])).toMatchObject({ command: 'convert', stopOnStdinClose: true });
+    expect(usageError(['serve', '--stop-on-stdin-close'])).toMatchObject({ exitCode: ExitCode.Usage, message: '--stop-on-stdin-close only works when converting a replay' });
+    expect(usageError(['prepare', '--stop-on-stdin-close'])).toMatchObject({ exitCode: ExitCode.Usage });
+  });
+  it('documents --stop-on-stdin-close', () => {
+    expect(USAGE).toContain('--stop-on-stdin-close Stop cleanly when standard input closes (for programs that run fc2mp4)');
   });
   it('parses the emulator commands', () => {
     expect(parseCli(['update-emulator'])).toEqual({ command: 'update-emulator', fightcadeDir: undefined, verbose: false });

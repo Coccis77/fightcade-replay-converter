@@ -5,7 +5,7 @@ import { ConvertError, ExitCode } from './errors.js';
 import { homedir } from 'node:os';
 import { appPaths, supportedPlatform } from './platform.js';
 import { dataFilePath, resetAdmin, serve } from './server/serve.js';
-import { installSignalHandlers } from './signals.js';
+import { installSignalHandlers, stopOnStdinClose } from './signals.js';
 
 declare const __FC2MP4_VERSION__: string | undefined;
 
@@ -29,6 +29,7 @@ function progressLine(e: ProgressEvent): string {
 async function main(): Promise<number> {
   const controller = new AbortController();
   installSignalHandlers(process, controller, (msg) => process.stderr.write(msg), (code) => process.exit(code));
+  let stopWatchingStdin = () => {};
 
   const tty = process.stderr.isTTY;
   const log = (msg: string) => process.stderr.write(`${tty ? '\n' : ''}${msg}\n`);
@@ -65,6 +66,7 @@ async function main(): Promise<number> {
       process.stdout.write(result.updated ? 'Emulator updated.\n' : 'Emulator already up to date.\n');
       return result.warning ? ExitCode.Emulator : 0;
     }
+    if (request.stopOnStdinClose) stopWatchingStdin = stopOnStdinClose(process.stdin, controller, (msg) => process.stderr.write(msg));
     const result = await convert(request.input, {
       output: request.output,
       scale: request.scale,
@@ -88,6 +90,8 @@ async function main(): Promise<number> {
     }
     process.stderr.write(`Unexpected error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
     return 1;
+  } finally {
+    stopWatchingStdin();
   }
 }
 
