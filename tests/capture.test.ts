@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
-import { describe, expect, it } from 'vitest';
-import { capture, emulatorCommand, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { describe, expect, it, vi } from 'vitest';
+import { capture, emulatorCommand, waitAtMost, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 import { GAMES } from '../src/constants.js';
@@ -307,5 +307,32 @@ describe.skipIf(process.platform === 'win32')('sweepProcessGroup', () => {
 
   it('does nothing when the group is already gone', () => {
     expect(() => sweepProcessGroup(2 ** 22 - 3)).not.toThrow();
+  });
+});
+
+describe('waitAtMost', () => {
+  it('ends as soon as the process has exited, leaving no timer behind (or Node waits for it before exiting)', async () => {
+    vi.useFakeTimers();
+    try {
+      await waitAtMost(Promise.resolve(), 15_000);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after the limit when the process never exits', async () => {
+    vi.useFakeTimers();
+    try {
+      let done = false;
+      const waiting = waitAtMost(new Promise(() => {}), 15_000).then(() => (done = true));
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await waiting;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

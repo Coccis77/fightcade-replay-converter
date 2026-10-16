@@ -55,7 +55,8 @@ namespace Fc2mp4Ui
             bool exited = await Task.Run(() => p.WaitForExit(30_000));
             if (exited) return;
             forced = true;
-            KillTree(p.Id);
+            int pid = p.Id;
+            await Task.Run(() => KillTree(pid)); // taskkill can take seconds: never on the window's thread
         }
 
         static void KillTree(int pid)

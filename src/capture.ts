@@ -186,9 +186,20 @@ function wrap(child: ReturnType<typeof spawn>, kill: () => Promise<void>): Captu
     // Wait (bounded) for the process to really exit, so its files are released before cleanup.
     kill: async () => {
       await kill();
-      await Promise.race([done, new Promise((resolve) => setTimeout(resolve, TIMEOUTS.killMs))]);
+      await waitAtMost(done, TIMEOUTS.killMs);
     },
   };
+}
+
+// Waits for `promise`, at most `ms`. The timer is cleared as soon as the promise settles: a pending
+// timer keeps Node running, so fc2mp4 used to exit 15 s after stopping (Ctrl-C, or Cancel in the window).
+export async function waitAtMost(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function defaultCaptureDeps(
