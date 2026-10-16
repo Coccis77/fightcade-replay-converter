@@ -30,6 +30,10 @@ describe('parseReplayRef', () => {
     expect(parseReplayRef(input)).toEqual({ game: GAMES.garou, quarkId: ID });
   });
 
+  it('reads an Alpha 3 link', () => {
+    expect(parseReplayRef(`https://replay.fightcade.com/fbneo/sfa3/${ID}`)).toEqual({ game: GAMES.sfa3, quarkId: ID });
+  });
+
   it('reads a Super SF2X link', () => {
     expect(parseReplayRef(`https://replay.fightcade.com/fbneo/ssf2xjr1/${ID}`)).toEqual({ game: GAMES.ssf2xjr1, quarkId: ID });
   });
@@ -44,7 +48,7 @@ describe('parseReplayRef', () => {
     expect(error).toBeInstanceOf(ConvertError);
     expect(error).toMatchObject({
       exitCode: ExitCode.Usage,
-      message: `Unsupported game "${game}": supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X)`,
+      message: `Unsupported game "${game}": supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X), sfa3 (Alpha 3)`,
     });
   });
 
@@ -64,6 +68,11 @@ describe('GAMES', () => {
   it('holds the measured formats and required ROMs', () => {
     expect(GAMES.sfiii3nr1).toMatchObject({ roms: ['sfiii3nr1.zip', 'sfiii3.zip'], format: { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 } });
     expect(GAMES.garou).toMatchObject({ roms: ['garou.zip', 'neogeo.zip'], format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 } });
+    expect(GAMES.sfa3).toMatchObject({
+      title: 'Street Fighter Alpha 3',
+      roms: ['sfa3.zip'],
+      format: { width: 384, height: 224, bpp: 4, fpsX100: 5963, sampleRate: 44100 },
+    });
     expect(GAMES.ssf2xjr1).toMatchObject({
       title: 'Super Street Fighter II X: Grand Master Challenge',
       roms: ['ssf2xjr1.zip', 'ssf2t.zip'],

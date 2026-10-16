@@ -265,7 +265,7 @@ describe('requests', () => {
     expect(await res.json()).toMatchObject({ error: expect.stringContaining('Not a Fightcade replay link') });
     const other = await admin.post('/api/jobs', { url: `https://replay.fightcade.com/fbneo/kof98/${ID}` });
     expect(other.status).toBe(400);
-    expect(await other.json()).toMatchObject({ error: expect.stringContaining('supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X)') });
+    expect(await other.json()).toMatchObject({ error: expect.stringContaining('supported games are sfiii3nr1 (3rd Strike), garou (Garou), ssf2xjr1 (Super SF2X), sfa3 (Alpha 3)') });
   });
 
   it('passes the game of the link to the runner', async () => {
