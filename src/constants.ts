@@ -17,9 +17,10 @@ export const EMULATOR_EXE = 'fcadefbneo-fc2mp4.exe';
 
 export const TIMEOUTS = {
   firstFrameMs: 60_000,
-  // The stream never signals its end; the emulator exits after this long without input.
-  // Long enough to ride out network hiccups, which would otherwise look like the end.
-  emulatorIdleMs: 15_000,
+  // The stream never signals its end; the emulator exits after this long without input. Fightcade's
+  // server sends the inputs ahead: the longest pause measured between frames over 5 replays (≈59000
+  // frames, 2026-10-17) was 41 ms, so 3 s keeps a wide margin while saving 12 s per conversion.
+  emulatorIdleMs: 3_000,
   // Node-side watchdog: no new frame for this long once started means the emulator is stuck.
   stallMs: 45_000,
   killMs: 15_000,

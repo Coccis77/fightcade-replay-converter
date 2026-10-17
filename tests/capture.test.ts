@@ -90,7 +90,7 @@ describe('capture', () => {
       FC2MP4_VIDEO: 'Z:\\tmp\\fc2mp4-x\\video.fifo',
       FC2MP4_AUDIO: 'Z:\\tmp\\fc2mp4-x\\audio.raw',
       FC2MP4_INFO: 'Z:\\tmp\\fc2mp4-x\\info.txt',
-      FC2MP4_IDLE_MS: '15000',
+      FC2MP4_IDLE_MS: '3000',
     });
     expect(log).toEqual([`transport:${DIR}`, 'emulator', 'attach', `encoder:${DIR}/video.mp4`, 'close:transport']);
   });
