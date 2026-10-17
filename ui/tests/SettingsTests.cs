@@ -14,14 +14,25 @@ namespace Fc2mp4Ui.Tests
             Assert.Equal(@"C:\Tools\fc2mp4.exe", s.Exe);
             Assert.Equal("", s.FightcadeFolder);
             Assert.Equal(@"C:\Videos\Fightcade", s.OutputFolder);
+            Assert.Equal("x264", s.Encoder);
+        }
+
+        [Fact]
+        public void AnUnknownEncoderFallsBackToX264()
+        {
+            string path = TempFile();
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, "encoder=divx\n");
+            Assert.Equal("x264", Settings.Load(path, "e", "o").Encoder);
         }
 
         [Fact]
         public void SavesAndLoadsBack_CreatingTheFolder_EvenWithEqualsSignsInPaths()
         {
             string path = TempFile();
-            new Settings { Exe = @"C:\a=b\fc2mp4.exe", FightcadeFolder = @"D:\Fight cade", OutputFolder = @"E:\Out" }.Save(path);
+            new Settings { Exe = @"C:\a=b\fc2mp4.exe", FightcadeFolder = @"D:\Fight cade", OutputFolder = @"E:\Out", Encoder = "qsv" }.Save(path);
             var s = Settings.Load(path, "x", "y");
+            Assert.Equal("qsv", s.Encoder);
             Assert.Equal(@"C:\a=b\fc2mp4.exe", s.Exe);
             Assert.Equal(@"D:\Fight cade", s.FightcadeFolder);
             Assert.Equal(@"E:\Out", s.OutputFolder);

@@ -7,7 +7,7 @@ import type { FrameFormat } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
-import { mux, type ScaleMode } from './ffmpeg.js';
+import { mux, type EncoderName, type ScaleMode } from './ffmpeg.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run, which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
@@ -31,6 +31,7 @@ export type ProgressEvent =
 export interface ConvertOptions {
   output?: string;
   scale: ScaleMode;
+  encoder?: EncoderName;
   maxDurationMs: number;
   fightcadeDir?: string;
   signal?: AbortSignal;
@@ -153,6 +154,7 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
       dir,
       game: ref.game,
       scale: options.scale,
+      encoder: options.encoder,
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,
       onProgress: (frames, seconds, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds, elapsedMs }),

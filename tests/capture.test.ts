@@ -138,6 +138,15 @@ describe('capture', () => {
     expect(log).toContain('attach');
   });
 
+  it('says a hardware encoder is not available when it fails before its first frame', async () => {
+    const { deps } = harness({ infoAt: 1_000, encoderExitsAt: 1_000, encoderCode: 1 });
+    await expect(capture(deps, { ...base, encoder: 'nvenc' })).rejects.toMatchObject({
+      exitCode: ExitCode.Encode,
+      message: "The nvenc encoder isn't available on this computer",
+      hint: expect.stringMatching(/^Try another --encoder, or x264/),
+    });
+  });
+
   it('reports an encoder that dies while capturing', async () => {
     const { deps, log } = harness({ infoAt: 1_000, encoderExitsAt: 3_000, encoderCode: 1 });
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Encode });

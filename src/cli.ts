@@ -70,6 +70,7 @@ async function main(): Promise<number> {
     const result = await convert(request.input, {
       output: request.output,
       scale: request.scale,
+      encoder: request.encoder,
       maxDurationMs: request.maxDurationMs,
       fightcadeDir: request.fightcadeDir,
       signal: controller.signal,

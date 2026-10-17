@@ -29,6 +29,7 @@ namespace Fc2mp4Ui
         readonly TextBox exe = new TextBox { Dock = DockStyle.Fill };
         readonly TextBox fightcade = new TextBox { Dock = DockStyle.Fill };
         readonly TextBox output = new TextBox { Dock = DockStyle.Fill };
+        readonly ComboBox encoder = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         readonly Label exeVersionLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
         readonly LinkLabel downloadLink = new LinkLabel { Text = "Download the latest fc2mp4", AutoSize = true, Anchor = AnchorStyles.Left };
 
@@ -54,6 +55,8 @@ namespace Fc2mp4Ui
             var settings = Settings.Load(settingsPath, File.Exists(besideMe) ? besideMe : "", defaultOutput);
             exe.Text = settings.Exe;
             fightcade.Text = settings.FightcadeFolder;
+            encoder.Items.AddRange(Encoders.Labels);
+            encoder.SelectedIndex = Array.IndexOf(Encoders.Names, settings.Encoder);
             output.Text = settings.OutputFolder;
 
             AcceptButton = convert;
@@ -114,9 +117,12 @@ namespace Fc2mp4Ui
             var versionRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0) };
             versionRow.Controls.Add(exeVersionLabel);
             versionRow.Controls.Add(downloadLink);
-            grid.Controls.Add(versionRow, 1, 3);
+            grid.Controls.Add(new Label { Text = "Encoder", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
+            grid.Controls.Add(encoder, 1, 3);
+            grid.SetColumnSpan(encoder, 2);
+            grid.Controls.Add(versionRow, 1, 4);
             grid.SetColumnSpan(versionRow, 2);
-            grid.Controls.Add(help, 0, 4);
+            grid.Controls.Add(help, 0, 5);
             grid.SetColumnSpan(help, 3);
             group.Controls.Add(grid);
             root.Controls.Add(group);
@@ -226,6 +232,7 @@ namespace Fc2mp4Ui
             cancel.Enabled = running && !state.Stopping;
             foreach (var box in new[] { link, exe, fightcade, output }) box.ReadOnly = running;
             foreach (var button in browseButtons) button.Enabled = !running;
+            encoder.Enabled = !running;
         }
 
         async System.Threading.Tasks.Task StopAsync()
@@ -236,7 +243,9 @@ namespace Fc2mp4Ui
             await runner.CancelAsync();
         }
 
-        Settings CurrentSettings() => new Settings { Exe = exe.Text.Trim(), FightcadeFolder = fightcade.Text.Trim(), OutputFolder = output.Text.Trim() };
+        string SelectedEncoder() => encoder.SelectedIndex >= 0 ? Encoders.Names[encoder.SelectedIndex] : "x264";
+
+        Settings CurrentSettings() => new Settings { Exe = exe.Text.Trim(), FightcadeFolder = fightcade.Text.Trim(), OutputFolder = output.Text.Trim(), Encoder = SelectedEncoder() };
 
         void SaveSettings()
         {
@@ -257,7 +266,7 @@ namespace Fc2mp4Ui
             openVideo.Enabled = openFolder.Enabled = false;
             try
             {
-                runner.Start(exe.Text.Trim(), Fc2mp4Command.Arguments(link.Text, output.Text, fightcade.Text));
+                runner.Start(exe.Text.Trim(), Fc2mp4Command.Arguments(link.Text, output.Text, fightcade.Text, SelectedEncoder()));
             }
             catch (Exception e)
             {

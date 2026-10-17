@@ -42,7 +42,7 @@ Windows and macOS need Fightcade 2 installed, with the game opened once.
 Paste the replay link and press **Convert**; the console shows the progress, and **Open video**
 opens the result. The folders (Fightcade, videos) are under **Settings** and are remembered.
 Leave *Fightcade folder* empty unless fc2mp4 does not find Fightcade by itself.
-Settings also shows the version of your `fc2mp4.exe`; when a newer release is out, it says so and links
+Settings also has an **Encoder** choice (see `--encoder` below), shows the version of your `fc2mp4.exe`; when a newer release is out, it says so and links
 to the download page.
 
 **From PowerShell:**
@@ -97,6 +97,9 @@ Videos go to `~/Videos/Fightcade`.
 - `-o <file or folder>`: where to write the MP4 (default: the folder above, or `FC2MP4_OUTPUT_DIR`).
 - `--fightcade-dir <path>`: where Fightcade is, when it is not found by itself.
 - `--scale sharp|smooth`: upscaling style (default `sharp`).
+- `--encoder <name>`: video encoder. `x264` (CPU, the default, works everywhere), or a hardware encoder:
+  `nvenc` (NVIDIA), `qsv` (Intel), `amf` (AMD), `mf` (Windows, any GPU), `videotoolbox` (macOS). Hardware
+  encoders can be faster but make bigger files; if one isn't available on your computer, fc2mp4 says so.
 - `--max-duration <d>`: stop after this long, e.g. `90s`, `45m`, `1h` (default `60m`).
 - `-v`: print debug details. `--help` lists every command and option.
 

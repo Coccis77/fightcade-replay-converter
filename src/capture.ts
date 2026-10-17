@@ -6,7 +6,7 @@ import type { Writable } from 'node:stream';
 import { EMULATOR_EXE, TIMEOUTS, type FrameFormat } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run } from './exec.js';
-import { parseInfo, validateFormat, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
+import { parseInfo, validateFormat, type EncoderName, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
 import { streamArg, type ReplayRef } from './replayRef.js';
@@ -17,6 +17,7 @@ export { winPath } from './transport.js';
 
 export interface CaptureProcess {
   readonly exited: boolean;
+  lastError?(): string; // the last line the process printed on stderr (ffmpeg's reason for failing)
   wait(): Promise<number | null>;
   kill(): Promise<void>;
 }
@@ -35,6 +36,7 @@ export interface CaptureOptions {
   dir: string;
   game: string; // for messages (a vertical game is refused by name)
   scale: ScaleMode;
+  encoder?: EncoderName; // x264 when not set
   maxDurationMs: number;
   signal?: AbortSignal;
   onProgress?: (frames: number, seconds: number, elapsedMs: number) => void;
@@ -122,7 +124,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
           validateFormat(reported, opts.game);
           format = reported;
           encoder = deps.startEncoder(
-            videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format }),
+            videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format, encoder: opts.encoder }),
             (n) => (frames = n),
             (stdin) => transport.attach(stdin),
           );
@@ -139,7 +141,15 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
         }
         break;
       }
-      if (encoder?.exited) throw new ConvertError(ExitCode.Encode, 'The video encoder stopped unexpectedly');
+      if (encoder?.exited) {
+        const name = opts.encoder ?? 'x264';
+        // A hardware encoder failing before its first frame: no such GPU, or its driver is missing.
+        if (name !== 'x264' && frames === 0) {
+          const reason = encoder.lastError?.();
+          throw new ConvertError(ExitCode.Encode, `The ${name} encoder isn't available on this computer`, `Try another --encoder, or x264${reason ? ` (ffmpeg: ${reason})` : ''}`);
+        }
+        throw new ConvertError(ExitCode.Encode, 'The video encoder stopped unexpectedly');
+      }
       const now = deps.now();
       const elapsed = now - start;
       if (frames !== lastFrames) {
@@ -228,16 +238,22 @@ export function defaultCaptureDeps(
           }),
     toEmulatorPath: (p) => (install.platform === 'win32' ? p : winPath(p)),
     startEncoder: (args, onFrames, attach) => {
-      const child = spawn(ffmpeg, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+      const child = spawn(ffmpeg, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+      let lastError = '';
+      child.stderr!.on('data', (d) => {
+        const lines = String(d).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (lines.length > 0) lastError = lines.at(-1)!;
+      });
       child.stdin!.on('error', () => {}); // ffmpeg exiting early must not crash Node (EPIPE)
       attach(child.stdin!);
       child.stdout!.on('data', (d) => {
         const frames = parseProgressFrames(String(d));
         if (frames !== null) onFrames(frames);
       });
-      return wrap(child, async () => {
+      const proc = wrap(child, async () => {
         child.kill('SIGKILL');
       });
+      return Object.assign(proc, { lastError: () => lastError });
     },
     startEmulator: (env) => {
       // FBNeo divides by the screen size while sizing its window: a sleeping Mac display (size 0)

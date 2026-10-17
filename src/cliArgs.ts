@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { DEFAULT_MAX_DURATION_MS } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
-import type { ScaleMode } from './ffmpeg.js';
+import { ENCODERS, type EncoderName, type ScaleMode } from './ffmpeg.js';
 
 export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
@@ -16,6 +16,8 @@ Pass the replay link; a quark ID alone means 3rd Strike. Vertical games are not 
   -o, --output <path>       MP4 file, or an existing folder
                             (default: FC2MP4_OUTPUT_DIR, else ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
       --scale sharp|smooth  Upscaling style (default: sharp)
+      --encoder <name>      Video encoder: x264 (CPU, default), nvenc (NVIDIA), qsv (Intel), amf (AMD),
+                            mf (Windows, any GPU) or videotoolbox (macOS)
       --max-duration <d>    Stop capturing after this long: 90s, 45m, 1h (default: 60m)
       --fightcade-dir <p>   Fightcade install (FightCade2.app on macOS, the Fightcade folder on Windows;
                             on Linux a Fightcade folder or its emulator/fbneo folder, also FC2MP4_FIGHTCADE_DIR)
@@ -32,7 +34,7 @@ reset-admin removes the web page's admin account (the output folder's fc2mp4-dat
 
 export type CliRequest =
   | { command: 'help' }
-  | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; stopOnStdinClose: boolean; verbose: boolean }
+  | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; stopOnStdinClose: boolean; encoder: EncoderName; verbose: boolean }
   | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
   | { command: 'prepare'; verbose: boolean }
   | { command: 'reset-admin'; verbose: boolean }
@@ -71,6 +73,7 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
       options: {
         output: { type: 'string', short: 'o' },
         scale: { type: 'string' },
+        encoder: { type: 'string' },
         'max-duration': { type: 'string' },
         'fightcade-dir': { type: 'string' },
         'stop-on-stdin-close': { type: 'boolean' },
@@ -122,6 +125,10 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
   }
   if (positionals.length !== 1) throw usage('Expected exactly one replay link or quark ID');
   const scale = values.scale ?? 'sharp';
+  const encoder = (values.encoder ?? 'x264') as EncoderName;
+  if (!ENCODERS.includes(encoder)) {
+    throw new ConvertError(ExitCode.Usage, `Invalid --encoder "${values.encoder}"`, `Use ${ENCODERS.slice(0, -1).join(', ')} or ${ENCODERS.at(-1)}`);
+  }
   if (scale !== 'sharp' && scale !== 'smooth') throw new ConvertError(ExitCode.Usage, `Invalid --scale "${scale}"`, 'Use sharp or smooth');
   return {
     command: 'convert',
@@ -131,6 +138,7 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
     maxDurationMs: values['max-duration'] ? parseDuration(values['max-duration']) : DEFAULT_MAX_DURATION_MS,
     fightcadeDir: values['fightcade-dir'],
     stopOnStdinClose: values['stop-on-stdin-close'] ?? false,
+    encoder,
     verbose,
   };
 }

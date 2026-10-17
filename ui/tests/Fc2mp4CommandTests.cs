@@ -22,6 +22,16 @@ namespace Fc2mp4Ui.Tests
         }
 
         [Fact]
+        public void PassesTheEncoderOnlyWhenNotTheDefault()
+        {
+            Assert.Equal(
+                new[] { "1-2", "-o", @"C:\Videos", "--encoder", "nvenc", "--stop-on-stdin-close" },
+                Fc2mp4Command.Arguments("1-2", @"C:\Videos", "", "nvenc"));
+            Assert.DoesNotContain("--encoder", Fc2mp4Command.Arguments("1-2", @"C:\Videos", "", "x264"));
+            Assert.DoesNotContain("--encoder", Fc2mp4Command.Arguments("1-2", @"C:\Videos", "", ""));
+        }
+
+        [Fact]
         public void TrimsWhatWasPasted()
         {
             Assert.Equal("https://replay.fightcade.com/fbneo/garou/1-2",

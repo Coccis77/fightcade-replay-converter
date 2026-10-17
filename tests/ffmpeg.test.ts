@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { audioInputRate, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
+import { audioInputRate, ENCODERS, encoderArgs, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
 
@@ -18,12 +18,36 @@ describe('ffmpeg arguments', () => {
   it('encodes raw BGRA frames to 1440x1080 H.264 without audio', () => {
     expect(videoEncodeArgs({ input: '/t/video.fifo', output: '/t/video.mp4', scale: 'sharp', format: SF3 })).toEqual([
       '-hide_banner', '-nostats', '-progress', 'pipe:1', '-y',
+      '-thread_queue_size', '256',
       '-f', 'rawvideo', '-pix_fmt', 'bgr0', '-s', '384x224', '-r', '59.59', '-i', '/t/video.fifo',
       '-vf', 'format=yuv444p,scale=iw*4:ih*4:flags=neighbor,scale=1440:1080:flags=lanczos,setsar=1',
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-an',
       '/t/video.mp4',
     ]);
     expect(videoEncodeArgs({ input: 'i', output: 'o', scale: 'smooth', format: SF3 })).toContain('format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1');
+  });
+
+  it('buffers up to 256 frames ahead, so the emulator and the encoder work at the same time', () => {
+    const args = videoEncodeArgs({ input: 'pipe:0', output: 'o', scale: 'sharp', format: SF3 });
+    expect(args.indexOf('-thread_queue_size')).toBeLessThan(args.indexOf('-i'));
+    expect(args[args.indexOf('-thread_queue_size') + 1]).toBe('256');
+  });
+
+  it.each([
+    ['x264', ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']],
+    ['nvenc', ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '20', '-b:v', '0', '-pix_fmt', 'yuv420p']],
+    ['qsv', ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '20', '-pix_fmt', 'nv12']],
+    ['amf', ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '20', '-qp_p', '20', '-pix_fmt', 'nv12']],
+    ['mf', ['-c:v', 'h264_mf', '-hw_encoding', '1', '-rate_control', 'quality', '-quality', '80', '-pix_fmt', 'nv12']],
+    ['videotoolbox', ['-c:v', 'h264_videotoolbox', '-q:v', '65', '-pix_fmt', 'nv12']],
+  ] as const)('encodes with %s', (encoder, expected) => {
+    expect(encoderArgs(encoder)).toEqual(expected);
+    const args = videoEncodeArgs({ input: 'i', output: 'o', scale: 'sharp', format: SF3, encoder });
+    expect(args.slice(args.indexOf('-c:v'), args.indexOf('-an'))).toEqual(expected);
+  });
+
+  it('lists every encoder, x264 first (the default)', () => {
+    expect(ENCODERS).toEqual(['x264', 'nvenc', 'qsv', 'amf', 'mf', 'videotoolbox']);
   });
 
   it('reads raw frames at the game size and rate', () => {
