@@ -6,6 +6,7 @@ import { GAMES } from '../src/constants.js';
 
 const install = installLayout('/Apps/FightCade2.app');
 const ID = '1700000000000-1234';
+const SF3_FORMAT = { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 };
 const baseOptions: ConvertOptions = { scale: 'sharp', maxDurationMs: 3_600_000 };
 
 function harness(over: Partial<ConvertDeps> = {}) {
@@ -51,8 +52,8 @@ function harness(over: Partial<ConvertDeps> = {}) {
       return '/tmp/run';
     },
     capture: async (_install, ref, _ffmpeg, opts) => {
-      calls.push(`capture:${ref.game.id}:${ref.quarkId}:${opts.dir}:${opts.format.width}`);
-      return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, endReason: 'ended' };
+      calls.push(`capture:${opts.game}:${ref.quarkId}:${opts.dir}`);
+      return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, format: SF3_FORMAT, endReason: 'ended' };
     },
     mkdir: async (dir) => {
       calls.push(`mkdir:${dir}`);
@@ -74,7 +75,7 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run:384`,
+      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`,
       'mkdir:/out', `mux:/out/${ID}.mp4:5959`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
@@ -82,15 +83,15 @@ describe('convert', () => {
   it('captures the game from the link', async () => {
     const { deps, calls } = harness();
     await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps);
-    expect(calls).toContain(`capture:garou:${ID}:/tmp/run:320`);
+    expect(calls).toContain(`capture:garou:${ID}:/tmp/run`);
   });
 
-  it('reports progress and length in seconds at the game frame rate', async () => {
+  it('passes on capture progress and times the result at the reported frame rate', async () => {
     const events: unknown[] = [];
     const { deps } = harness({
       capture: async (_install, _ref, _ffmpeg, opts) => {
-        opts.onProgress?.(35508, 60_000); // 600 s of Garou at 59.18 fps
-        return { video: 'v', audio: 'a', frames: 35508, endReason: 'ended' };
+        opts.onProgress?.(35508, 600, 60_000);
+        return { video: 'v', audio: 'a', frames: 35508, format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 }, endReason: 'ended' };
       },
     });
     const result = await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, { ...baseOptions, onProgress: (e) => events.push(e) }, deps);
@@ -114,7 +115,7 @@ describe('convert', () => {
   it('accepts an already parsed replay', async () => {
     const { deps, calls } = harness();
     await convert({ game: GAMES.garou, quarkId: ID }, baseOptions, deps);
-    expect(calls).toContain(`capture:garou:${ID}:/tmp/run:320`);
+    expect(calls).toContain(`capture:garou:${ID}:/tmp/run`);
   });
 
   it('fails before capturing when the output folder is not writable', async () => {
@@ -196,7 +197,7 @@ describe('convert', () => {
   it('warns when max-duration cut the capture short', async () => {
     const logs: string[] = [];
     const { deps } = harness({
-      capture: async () => ({ video: 'v', audio: 'a', frames: 10, endReason: 'max-duration' }),
+      capture: async () => ({ video: 'v', audio: 'a', frames: 10, format: SF3_FORMAT, endReason: 'max-duration' }),
     });
     await convert(ID, { ...baseOptions, log: (m) => logs.push(m) }, deps);
     expect(logs.some((m) => m.includes('--max-duration'))).toBe(true);

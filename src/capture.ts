@@ -6,7 +6,7 @@ import type { Writable } from 'node:stream';
 import { EMULATOR_EXE, TIMEOUTS, type FrameFormat } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run } from './exec.js';
-import { checkInfo, parseInfo, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
+import { parseInfo, validateFormat, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
 import { streamArg, type ReplayRef } from './replayRef.js';
@@ -24,7 +24,7 @@ export interface CaptureProcess {
 export interface CaptureDeps {
   openTransport(dir: string): Promise<VideoTransport>;
   toEmulatorPath(p: string): string;
-  startEncoder(args: string[], onFrames: (frames: number) => void, attach: ((stdin: Writable) => void) | null): CaptureProcess;
+  startEncoder(args: string[], onFrames: (frames: number) => void, attach: (stdin: Writable) => void): CaptureProcess;
   startEmulator(env: Record<string, string>): CaptureProcess;
   readInfo(path: string): Promise<string | null>;
   now(): number;
@@ -33,17 +33,18 @@ export interface CaptureDeps {
 
 export interface CaptureOptions {
   dir: string;
+  game: string; // for messages (a vertical game is refused by name)
   scale: ScaleMode;
-  format: FrameFormat;
   maxDurationMs: number;
   signal?: AbortSignal;
-  onProgress?: (frames: number, elapsedMs: number) => void;
+  onProgress?: (frames: number, seconds: number, elapsedMs: number) => void;
 }
 
 export interface CaptureResult {
   video: string;
   audio: string;
   frames: number;
+  format: FrameFormat; // as the emulator reported it
   endReason: 'ended' | 'max-duration';
 }
 
@@ -96,8 +97,10 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
 
   const transport = await deps.openTransport(opts.dir);
   let frames = 0;
-  const attach = transport.encoderInput === 'pipe:0' ? (stdin: Writable) => transport.attach(stdin) : null;
-  const encoder = deps.startEncoder(videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format: opts.format }), (n) => (frames = n), attach);
+  let format: FrameFormat | null = null;
+  let encoder: CaptureProcess | null = null;
+  // The emulator first, ffmpeg once the emulator reported the game's format (the transport holds
+  // the frames meanwhile).
   const emulator = deps.startEmulator({
     FC2MP4_VIDEO: transport.emulatorPath,
     FC2MP4_AUDIO: deps.toEmulatorPath(audio),
@@ -106,23 +109,28 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
   });
 
   const start = deps.now();
-  let started = false;
   let lastFrames = 0;
   let lastProgressAt = start;
   let endReason: CaptureResult['endReason'] = 'ended';
   try {
     for (;;) {
       if (opts.signal?.aborted) throw new ConvertError(ExitCode.Interrupted, 'Interrupted');
-      if (!started) {
+      if (format === null) {
         const text = await deps.readInfo(info);
         if (text !== null) {
-          checkInfo(parseInfo(text), opts.format);
-          started = true;
+          const reported = parseInfo(text);
+          validateFormat(reported, opts.game);
+          format = reported;
+          encoder = deps.startEncoder(
+            videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format }),
+            (n) => (frames = n),
+            (stdin) => transport.attach(stdin),
+          );
           lastProgressAt = deps.now();
         }
       }
       if (emulator.exited) {
-        if (!started) {
+        if (format === null) {
           throw new ConvertError(ExitCode.Emulator, 'The emulator exited before the replay started', 'Check the link; a quark ID alone means a 3rd Strike replay. The replay may also no longer exist');
         }
         const code = await emulator.wait();
@@ -131,35 +139,36 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
         }
         break;
       }
-      if (encoder.exited) throw new ConvertError(ExitCode.Encode, 'The video encoder stopped unexpectedly');
+      if (encoder?.exited) throw new ConvertError(ExitCode.Encode, 'The video encoder stopped unexpectedly');
       const now = deps.now();
       const elapsed = now - start;
       if (frames !== lastFrames) {
         lastFrames = frames;
         lastProgressAt = now;
       }
-      if (started && now - lastProgressAt >= TIMEOUTS.stallMs) {
+      if (format !== null && now - lastProgressAt >= TIMEOUTS.stallMs) {
         throw new ConvertError(ExitCode.Recording, `The capture stalled: no new frame for ${TIMEOUTS.stallMs / 1000} s`, 'The emulator may be stuck; try again (use -v for details)');
       }
-      if (!started && elapsed >= TIMEOUTS.firstFrameMs) {
+      if (format === null && elapsed >= TIMEOUTS.firstFrameMs) {
         throw new ConvertError(ExitCode.Recording, 'The replay stream never started', 'Check the link (a quark ID alone means a 3rd Strike replay) and that Fightcade replay servers are reachable');
       }
       if (elapsed >= opts.maxDurationMs) {
         // Nothing to keep yet: say so instead of letting ffmpeg fail on an empty video.
-        if (!started || frames === 0) throw new ConvertError(ExitCode.Recording, 'The replay had not started when --max-duration was reached', 'Use a longer --max-duration');
+        if (format === null || frames === 0) throw new ConvertError(ExitCode.Recording, 'The replay had not started when --max-duration was reached', 'Use a longer --max-duration');
         endReason = 'max-duration';
         await emulator.kill();
         break;
       }
-      opts.onProgress?.(frames, elapsed);
+      if (format !== null) opts.onProgress?.(frames, (frames * 100) / format.fpsX100, elapsed);
       await deps.sleep(TIMEOUTS.pollMs);
     }
-    const code = await encoder.wait();
+    // The loop only leaves normally once the format is known, so ffmpeg runs.
+    const code = await encoder!.wait();
     if (code !== 0) throw new ConvertError(ExitCode.Encode, `The video encoder failed (exit ${code})`);
-    return { video, audio, frames, endReason };
+    return { video, audio, frames, format: format!, endReason };
   } finally {
     if (!emulator.exited) await emulator.kill().catch(() => {});
-    if (!encoder.exited) await encoder.kill().catch(() => {});
+    if (encoder !== null && !encoder.exited) await encoder.kill().catch(() => {});
     await transport.close().catch(() => {});
   }
 }
@@ -219,11 +228,9 @@ export function defaultCaptureDeps(
           }),
     toEmulatorPath: (p) => (install.platform === 'win32' ? p : winPath(p)),
     startEncoder: (args, onFrames, attach) => {
-      const child = spawn(ffmpeg, args, { stdio: [attach ? 'pipe' : 'ignore', 'pipe', 'ignore'] });
-      if (attach && child.stdin) {
-        child.stdin.on('error', () => {}); // ffmpeg exiting early must not crash Node (EPIPE)
-        attach(child.stdin);
-      }
+      const child = spawn(ffmpeg, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+      child.stdin!.on('error', () => {}); // ffmpeg exiting early must not crash Node (EPIPE)
+      attach(child.stdin!);
       child.stdout!.on('data', (d) => {
         const frames = parseProgressFrames(String(d));
         if (frames !== null) onFrames(frames);

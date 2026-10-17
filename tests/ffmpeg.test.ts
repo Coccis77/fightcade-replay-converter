@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { audioInputRate, checkInfo, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, videoEncodeArgs } from '../src/ffmpeg.js';
+import { audioInputRate, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
 import { GAMES } from '../src/constants.js';
@@ -70,20 +70,21 @@ function thrown(fn: () => unknown): unknown {
 
 describe('emulator info', () => {
   const good = 'width=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
-  it('parses and accepts the expected format', () => {
+  it('parses and accepts a horizontal format', () => {
     const info = parseInfo(good);
     expect(info).toEqual({ width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 });
-    expect(() => checkInfo(info, SF3)).not.toThrow();
-    expect(() => checkInfo(parseInfo('width=320\nheight=224\nbpp=4\nfps_x100=5918\nsample_rate=44100\n'), GAMES.garou.format)).not.toThrow();
+    expect(() => validateFormat(info, 'sfiii3nr1')).not.toThrow();
+    expect(() => validateFormat(parseInfo('width=400\nheight=254\nbpp=4\nfps_x100=5471\nsample_rate=44100\n'), 'mk')).not.toThrow();
   });
-  it('rejects another format with a Recording error describing both', () => {
-    expect(thrown(() => checkInfo(parseInfo(good.replace('bpp=4', 'bpp=2')), SF3))).toMatchObject({
-      exitCode: ExitCode.Recording,
-      message: expect.stringContaining('bpp 2'),
-    });
-    expect(thrown(() => checkInfo(parseInfo(good), GAMES.garou.format))).toMatchObject({
-      exitCode: ExitCode.Recording,
-      message: expect.stringContaining('expected 320x224'),
+  it('rejects an invalid format with a Recording error', () => {
+    expect(thrown(() => validateFormat(parseInfo(good.replace('bpp=4', 'bpp=2')), 'x'))).toMatchObject({ exitCode: ExitCode.Recording, message: expect.stringContaining('bpp 2') });
+    expect(thrown(() => validateFormat(parseInfo(good.replace('fps_x100=5959', 'fps_x100=0')), 'x'))).toMatchObject({ exitCode: ExitCode.Recording });
+  });
+  it('refuses a vertical game by name', () => {
+    expect(thrown(() => validateFormat(parseInfo('width=240\nheight=320\nbpp=4\nfps_x100=5755\nsample_rate=44100\n'), 'ddonpach'))).toMatchObject({
+      exitCode: ExitCode.Usage,
+      message: 'ddonpach is a vertical game; vertical games are not supported yet',
+      hint: 'Only horizontal games can be converted for now',
     });
   });
   it('rejects an incomplete info file', () => {

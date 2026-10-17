@@ -148,22 +148,20 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
 
     dir = await deps.makeTempDir();
     options.onProgress?.({ phase: 'connecting' });
-    const { format } = ref.game;
-    const seconds = (frames: number) => (frames * 100) / format.fpsX100;
     const captured = await deps.capture(install, ref, ffmpeg, {
       dir,
+      game: ref.game.id,
       scale: options.scale,
-      format,
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,
-      onProgress: (frames, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds: seconds(frames), elapsedMs }),
+      onProgress: (frames, seconds, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds, elapsedMs }),
     });
     if (captured.endReason === 'max-duration') log('Warning: reached --max-duration; the video may be cut short');
 
     options.onProgress?.({ phase: 'finalizing' });
     await deps.mkdir(dirname(output));
-    await deps.mux({ video: captured.video, audio: captured.audio, output, format }, ffmpeg);
-    return { output, frames: captured.frames, seconds: seconds(captured.frames), endReason: captured.endReason };
+    await deps.mux({ video: captured.video, audio: captured.audio, output, format: captured.format }, ffmpeg);
+    return { output, frames: captured.frames, seconds: (captured.frames * 100) / captured.format.fpsX100, endReason: captured.endReason };
   } catch (err) {
     // After Ctrl-C, whatever failed next (a download, ffmpeg, the mux) is an interruption.
     if (options.signal?.aborted && !(err instanceof ConvertError && err.exitCode === ExitCode.Interrupted)) {

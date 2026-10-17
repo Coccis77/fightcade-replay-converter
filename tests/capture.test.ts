@@ -48,7 +48,7 @@ function harness(
       log.push(`transport:${dir}`);
       return {
         emulatorPath: 'Z:\\tmp\\fc2mp4-x\\video.fifo',
-        encoderInput: `${dir}/video.fifo`,
+        encoderInput: 'pipe:0',
         attach: () => {
           log.push('attach');
         },
@@ -79,13 +79,13 @@ function harness(
   return { deps, log, env: () => emulatorEnv, time: () => t };
 }
 
-const base = { dir: DIR, scale: 'sharp' as const, maxDurationMs: 3_600_000, format: GAMES.sfiii3nr1.format };
+const base = { dir: DIR, game: 'sfiii3nr1', scale: 'sharp' as const, maxDurationMs: 3_600_000 };
 
 describe('capture', () => {
   it('passes Windows paths to the emulator and finishes when it exits', async () => {
     const { deps, log, env } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000 });
     const result = await capture(deps, base);
-    expect(result).toMatchObject({ video: `${DIR}/video.mp4`, audio: `${DIR}/audio.raw`, endReason: 'ended' });
+    expect(result).toMatchObject({ video: `${DIR}/video.mp4`, audio: `${DIR}/audio.raw`, endReason: 'ended', format: { width: 384, height: 224, fpsX100: 5959 } });
     expect(result.frames).toBeGreaterThan(0);
     expect(env()).toEqual({
       FC2MP4_VIDEO: 'Z:\\tmp\\fc2mp4-x\\video.fifo',
@@ -93,7 +93,7 @@ describe('capture', () => {
       FC2MP4_INFO: 'Z:\\tmp\\fc2mp4-x\\info.txt',
       FC2MP4_IDLE_MS: '15000',
     });
-    expect(log).toEqual([`transport:${DIR}`, `encoder:${DIR}/video.mp4`, 'emulator', 'close:transport']);
+    expect(log).toEqual([`transport:${DIR}`, 'emulator', 'attach', `encoder:${DIR}/video.mp4`, 'close:transport']);
   });
 
   it('fails within firstFrameMs when the stream never starts, killing both processes', async () => {
@@ -101,13 +101,13 @@ describe('capture', () => {
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording });
     expect(time()).toBe(60_000);
     expect(log).toContain('kill:emulator');
-    expect(log).toContain('kill:encoder');
+    expect(log.some((l) => l.startsWith('encoder:'))).toBe(false); // ffmpeg is never started
   });
 
   it('reports an emulator that exits before the first frame', async () => {
     const { deps, log } = harness({ emulatorExitsAt: 2_000 });
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Emulator });
-    expect(log).toContain('kill:encoder');
+    expect(log.some((l) => l.startsWith('encoder:'))).toBe(false);
   });
 
   it('reports an emulator that crashes after the replay started instead of keeping a truncated video', async () => {
@@ -171,18 +171,45 @@ describe('capture', () => {
     });
   });
 
-  it('feeds the encoder at the game format and accepts its info file', async () => {
-    const info = 'width=320\nheight=224\nbpp=4\nfps_x100=5918\nsample_rate=44100\n';
-    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000, info });
+  it('starts ffmpeg only after the emulator reported its format, at that format', async () => {
+    const info = 'width=400\nheight=254\nbpp=4\nfps_x100=5471\nsample_rate=44100\n';
+    const { deps, log } = harness({ infoAt: 3_000, emulatorExitsAt: 10_000, info });
     let encoderArgs: string[] = [];
+    let startedAt = -1;
     const start = deps.startEncoder;
     deps.startEncoder = (args, onFrames, attach) => {
       encoderArgs = args;
+      startedAt = log.length;
       return start(args, onFrames, attach);
     };
-    await expect(capture(deps, { ...base, format: GAMES.garou.format })).resolves.toMatchObject({ endReason: 'ended' });
-    expect(encoderArgs).toContain('320x224');
-    expect(encoderArgs).toContain('59.18');
+    const result = await capture(deps, { ...base, game: 'mk' });
+    expect(log.indexOf('emulator')).toBeLessThan(startedAt);
+    expect(encoderArgs).toContain('400x254');
+    expect(encoderArgs).toContain('54.71');
+    expect(result.format).toEqual({ width: 400, height: 254, bpp: 4, fpsX100: 5471, sampleRate: 44100 });
+  });
+
+  it('refuses a vertical game before starting ffmpeg, and stops the emulator', async () => {
+    const info = 'width=240\nheight=320\nbpp=4\nfps_x100=5755\nsample_rate=44100\n';
+    const { deps, log } = harness({ infoAt: 1_000, info });
+    await expect(capture(deps, { ...base, game: 'ddonpach' })).rejects.toMatchObject({ exitCode: ExitCode.Usage, message: expect.stringContaining('ddonpach is a vertical game') });
+    expect(log).toContain('kill:emulator');
+    expect(log.some((l) => l.startsWith('encoder:'))).toBe(false);
+    expect(log).toContain('close:transport');
+  });
+
+  it('reports progress in seconds at the reported frame rate, only once the format is known', async () => {
+    const info = 'width=400\nheight=254\nbpp=4\nfps_x100=5471\nsample_rate=44100\n';
+    const { deps } = harness({ infoAt: 2_000, emulatorExitsAt: 12_000, info });
+    const seen: [number, number][] = [];
+    await capture(deps, { ...base, game: 'mk', onProgress: (frames, seconds) => seen.push([frames, seconds]) });
+    expect(seen.length).toBeGreaterThan(0);
+    for (const [frames, seconds] of seen) expect(seconds).toBeCloseTo((frames * 100) / 5471, 6);
+  });
+
+  it('finishes when the emulator exits right after reporting its format, before any frame', async () => {
+    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 1_000, framesStopAt: 1_000 });
+    await expect(capture(deps, base)).resolves.toMatchObject({ endReason: 'ended' });
   });
 
   it('asks for the full link when the emulator never starts (a bare ID is 3rd Strike)', async () => {
@@ -213,7 +240,7 @@ describe('capture', () => {
     const sleep = deps.sleep;
     deps.sleep = async (ms) => {
       await sleep(ms);
-      if (ms > 0) controller.abort();
+      if (deps.now() >= 1_500) controller.abort(); // after ffmpeg started (format reported at 1 s)
     };
     await expect(capture(deps, { ...base, signal: controller.signal })).rejects.toMatchObject({ exitCode: ExitCode.Interrupted });
     expect(log).toContain('kill:emulator');

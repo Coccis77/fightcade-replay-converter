@@ -55,15 +55,20 @@ export function parseInfo(text: string): FrameFormat {
   return { width: read('width'), height: read('height'), bpp: read('bpp'), fpsX100: read('fps_x100'), sampleRate: read('sample_rate') };
 }
 
-export function checkInfo(info: FrameFormat, expected: FrameFormat): void {
-  const e = expected;
-  if (info.width !== e.width || info.height !== e.height || info.bpp !== e.bpp || info.fpsX100 !== e.fpsX100 || info.sampleRate !== e.sampleRate) {
-    const describe = (f: FrameFormat) => `${f.width}x${f.height} bpp ${f.bpp} @ ${f.fpsX100 / 100} fps, ${f.sampleRate} Hz`;
+const describeFormat = (f: FrameFormat) => `${f.width}x${f.height} bpp ${f.bpp} @ ${f.fpsX100 / 100} fps, ${f.sampleRate} Hz`;
+
+// What the emulator reported for this game. Vertical games report their upright size (taller than
+// wide) but draw sideways: not supported (they would need the emulator's orientation flags).
+export function validateFormat(info: FrameFormat, game: string): void {
+  if (info.bpp !== 4 || info.width <= 0 || info.height <= 0 || info.fpsX100 <= 0 || info.sampleRate <= 0) {
     throw new ConvertError(
       ExitCode.Recording,
-      `Unexpected frame format from the emulator: ${describe(info)} (expected ${describe(e)})`,
+      `Unexpected frame format from the emulator: ${describeFormat(info)}`,
       'The emulator build may not match this fc2mp4 version; run fc2mp4 rebuild-emulator',
     );
+  }
+  if (info.height > info.width) {
+    throw new ConvertError(ExitCode.Usage, `${game} is a vertical game; vertical games are not supported yet`, 'Only horizontal games can be converted for now');
   }
 }
 
