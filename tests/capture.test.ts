@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { capture, emulatorCommand, waitAtMost, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
-import { GAMES } from '../src/constants.js';
 
-const SF3 = { game: GAMES.sfiii3nr1, quarkId: '1-2' };
+const SF3 = { game: 'sfiii3nr1', quarkId: '1-2' };
 
 const INFO = 'width=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
 const DIR = '/tmp/fc2mp4-x';
@@ -257,7 +256,7 @@ describe('winPath', () => {
 describe('emulator launch per platform', () => {
   it('streams the replay game', () => {
     const mac = installLayout('/Applications/FightCade2.app', 'darwin');
-    expect(emulatorCommand(mac, '/rt', { game: GAMES.garou, quarkId: '1-2' }).args).toEqual(['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,garou,1-2.7,7100']);
+    expect(emulatorCommand(mac, '/rt', { game: 'garou', quarkId: '1-2' }).args).toEqual(['/rt/fcadefbneo-fc2mp4.exe', 'quark:stream,garou,1-2.7,7100']);
   });
   it('runs through wine.sh on macOS', () => {
     const mac = installLayout('/Applications/FightCade2.app', 'darwin');

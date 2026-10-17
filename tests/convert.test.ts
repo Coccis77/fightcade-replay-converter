@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { buildEmulatorLocally, convert, notWritableHint, prepare, updateEmulator, type ConvertDeps, type ConvertOptions } from '../src/convert.js';
 import { installLayout } from '../src/install.js';
 import { ConvertError, ExitCode } from '../src/errors.js';
-import { GAMES } from '../src/constants.js';
 
 const install = installLayout('/Apps/FightCade2.app');
 const ID = '1700000000000-1234';
@@ -24,7 +23,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push('preflight');
     },
     checkRoms: async (_install, game) => {
-      calls.push(`roms:${game.id}`);
+      calls.push(`roms:${game}`);
     },
     checkWritable: async (dir) => {
       calls.push(`writable:${dir}`);
@@ -102,19 +101,19 @@ describe('convert', () => {
   it('checks the ROMs of the replay game before capturing', async () => {
     const { deps, calls } = harness({
       checkRoms: async (_install, game) => {
-        throw new ConvertError(ExitCode.Preflight, `${game.title} ROM not found`);
+        throw new ConvertError(ExitCode.Preflight, `ROM not found: ${game}.zip`);
       },
     });
     await expect(convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps)).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
-      message: 'Garou: Mark of the Wolves ROM not found',
+      message: 'ROM not found: garou.zip',
     });
     expect(calls).toEqual(['lock', 'preflight', 'unlock']);
   });
 
   it('accepts an already parsed replay', async () => {
     const { deps, calls } = harness();
-    await convert({ game: GAMES.garou, quarkId: ID }, baseOptions, deps);
+    await convert({ game: 'garou', quarkId: ID }, baseOptions, deps);
     expect(calls).toContain(`capture:garou:${ID}:/tmp/run`);
   });
 

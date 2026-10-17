@@ -1,6 +1,6 @@
-import type { Game } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { pathFor, supportedPlatform, type Platform } from './platform.js';
+import { requiredRoms, type RomList } from './romList.js';
 
 export const APT_HINT = 'sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg';
 
@@ -101,13 +101,13 @@ export async function preflight(install: FightcadeInstall, deps: PreflightDeps):
   await checkTools(install.platform, deps.which);
 }
 
-// Per conversion, for the replay's game: a server with only one game's ROMs still converts that game.
-export async function checkRoms(install: FightcadeInstall, game: Game, exists: (p: string) => Promise<boolean>): Promise<void> {
+// Per conversion, for the replay's game: a server with only some games' ROMs still converts those.
+export async function checkRoms(install: FightcadeInstall, game: string, list: RomList | null, exists: (p: string) => Promise<boolean>): Promise<void> {
   const p = pathFor(install.platform);
-  for (const rom of game.roms) {
+  for (const rom of requiredRoms(game, list)) {
     const file = p.join(install.romsDir, rom);
     if (!(await exists(file))) {
-      throw new ConvertError(ExitCode.Preflight, `${game.title} ROM not found: ${file}`, `Open ${game.shortTitle} once in Fightcade so it downloads the ROM`);
+      throw new ConvertError(ExitCode.Preflight, `ROM not found: ${file}`, 'Open the game once in Fightcade so it downloads its ROMs');
     }
   }
 }

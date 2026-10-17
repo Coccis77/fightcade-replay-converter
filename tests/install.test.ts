@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkRoms, checkTools, installLayout, locateInstall, preflight } from '../src/install.js';
-import { GAMES } from '../src/constants.js';
+import { parseRomList } from '../src/romList.js';
 import { ExitCode } from '../src/errors.js';
 
 const MAC_ROOT = '/Applications/FightCade2.app';
@@ -75,23 +75,25 @@ describe('preflight', () => {
 describe('checkRoms', () => {
   const win = installLayout(WIN_ROOT, 'win32');
   const roms = `${WIN_ROOT}\\emulator\\fbneo\\ROMs`;
+  const list = parseRomList(JSON.stringify({ garou: { require: ['neogeo'] }, neogeo: {}, mk: {} }));
   const only = (...files: string[]) => async (p: string) => files.some((f) => p === `${roms}\\${f}`);
 
-  it('passes when every ROM of the game is there, whatever the other game', async () => {
-    await expect(checkRoms(win, GAMES.garou, only('garou.zip', 'neogeo.zip'))).resolves.toBeUndefined();
-    await expect(checkRoms(win, GAMES.sfiii3nr1, only('sfiii3nr1.zip', 'sfiii3.zip'))).resolves.toBeUndefined();
+  it('passes when the game and everything it requires are there', async () => {
+    await expect(checkRoms(win, 'garou', list, only('garou.zip', 'neogeo.zip'))).resolves.toBeUndefined();
+    await expect(checkRoms(win, 'mk', list, only('mk.zip'))).resolves.toBeUndefined();
   });
-
-  it('names the game and the missing file', async () => {
-    await expect(checkRoms(win, GAMES.garou, only('garou.zip'))).rejects.toMatchObject({
+  it('names the missing file', async () => {
+    await expect(checkRoms(win, 'garou', list, only('garou.zip'))).rejects.toMatchObject({
       exitCode: ExitCode.Preflight,
-      message: `Garou: Mark of the Wolves ROM not found: ${roms}\\neogeo.zip`,
-      hint: 'Open Garou once in Fightcade so it downloads the ROM',
+      message: `ROM not found: ${roms}\\neogeo.zip`,
+      hint: 'Open the game once in Fightcade so it downloads its ROMs',
     });
-    await expect(checkRoms(win, GAMES.sfiii3nr1, only('sfiii3nr1.zip'))).rejects.toMatchObject({
-      message: `Street Fighter III: 3rd Strike ROM not found: ${roms}\\sfiii3.zip`,
-      hint: 'Open 3rd Strike once in Fightcade so it downloads the ROM',
-    });
+  });
+  it('without a list checks only the game zip', async () => {
+    await expect(checkRoms(win, 'garou', null, only('garou.zip'))).resolves.toBeUndefined();
+  });
+  it('refuses a game missing from the list', async () => {
+    await expect(checkRoms(win, 'kof99', list, only())).rejects.toMatchObject({ exitCode: ExitCode.Usage });
   });
 });
 

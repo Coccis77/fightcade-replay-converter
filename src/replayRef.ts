@@ -1,8 +1,9 @@
-import { DEFAULT_GAME, GAMES, QUARK_SUFFIX, STREAM_PORT, type Game } from './constants.js';
+import { DEFAULT_GAME, QUARK_SUFFIX, STREAM_PORT } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 
+// game: the FBNeo name from the link (checked against Fightcade's list before converting).
 export interface ReplayRef {
-  game: Game;
+  game: string;
   quarkId: string;
 }
 
@@ -18,19 +19,12 @@ export function parseReplayRef(input: string): ReplayRef {
     throw new ConvertError(
       ExitCode.Usage,
       `Not a Fightcade replay link or quark ID: "${value}"`,
-      `Expected e.g. https://replay.fightcade.com/fbneo/${DEFAULT_GAME.id}/1700000000000-1234 or 1700000000000-1234`,
+      `Expected e.g. https://replay.fightcade.com/fbneo/${DEFAULT_GAME}/1700000000000-1234 or 1700000000000-1234`,
     );
   }
-  const [, id, quarkId] = match;
-  // hasOwn: "constructor" and friends are not games.
-  const game = Object.hasOwn(GAMES, id!) ? GAMES[id!] : undefined;
-  if (!game) {
-    const supported = Object.values(GAMES).map((g) => `${g.id} (${g.shortTitle})`).join(', ');
-    throw new ConvertError(ExitCode.Usage, `Unsupported game "${id}": supported games are ${supported}`);
-  }
-  return { game, quarkId: quarkId! };
+  return { game: match[1]!, quarkId: match[2]! };
 }
 
 export function streamArg(ref: ReplayRef): string {
-  return `quark:stream,${ref.game.id},${ref.quarkId}${QUARK_SUFFIX},${STREAM_PORT}`;
+  return `quark:stream,${ref.game},${ref.quarkId}${QUARK_SUFFIX},${STREAM_PORT}`;
 }

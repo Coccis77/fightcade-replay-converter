@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Jobs } from '../../src/server/jobs.js';
 import { ConvertError, ExitCode } from '../../src/errors.js';
-import { GAMES } from '../../src/constants.js';
 
 const A = '1700000000000-1111';
 const B = '1700000000000-2222';
 const C = '1700000000000-3333';
-const ref = (quarkId: string) => ({ game: GAMES.sfiii3nr1, quarkId });
+const ref = (quarkId: string) => ({ game: 'sfiii3nr1', quarkId });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 function deferred() {
@@ -27,7 +26,7 @@ function harness(files: string[] = []) {
     exists: async (p) => disk.has(p),
     run: (r, output, progress) => {
       const done = deferred();
-      runs.push({ id: r.quarkId, game: r.game.id, output, progress, done });
+      runs.push({ id: r.quarkId, game: r.game, output, progress, done });
       return done.promise;
     },
   });
@@ -186,13 +185,13 @@ describe('Jobs', () => {
 
   it('hands the runner the replay game', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit({ game: GAMES.garou, quarkId: A });
+    await jobs.submit({ game: 'garou', quarkId: A });
     expect(runs.map((r) => [r.id, r.game])).toEqual([[A, 'garou']]);
   });
 
   it('shows a ROM error from the runner as the failed view', async () => {
     const { jobs, runs } = harness();
-    await jobs.submit({ game: GAMES.garou, quarkId: A });
+    await jobs.submit({ game: 'garou', quarkId: A });
     runs[0]!.done.reject(new ConvertError(ExitCode.Preflight, 'Garou: Mark of the Wolves ROM not found: /f/ROMs/garou.zip', 'Open Garou once in Fightcade so it downloads the ROM'));
     await flush();
     expect(jobs.view(A)).toEqual({ state: 'failed', error: 'Garou: Mark of the Wolves ROM not found: /f/ROMs/garou.zip', hint: 'Open Garou once in Fightcade so it downloads the ROM' });

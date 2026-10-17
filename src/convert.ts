@@ -1,9 +1,9 @@
 import { constants } from 'node:fs';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
-import type { FrameFormat, Game } from './constants.js';
+import type { FrameFormat } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
@@ -18,6 +18,7 @@ import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
 import { parseReplayRef, type ReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
+import { loadRomList } from './romList.js';
 import { ensureWinePrefix } from './winePrefix.js';
 
 export type ProgressEvent =
@@ -50,7 +51,7 @@ export interface ConvertDeps {
   resolveOutput(quarkId: string, output?: string): Promise<string>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
-  checkRoms(install: FightcadeInstall, game: Game): Promise<void>;
+  checkRoms(install: FightcadeInstall, game: string): Promise<void>;
   checkWritable(dir: string): Promise<void>;
   checkTools(): Promise<void>;
   locateFfmpeg(install: FightcadeInstall | null, signal?: AbortSignal): Promise<string>;
@@ -79,7 +80,7 @@ export function defaultDeps(): ConvertDeps {
     resolveOutput: (quarkId, output) => resolveOutputPath(quarkId, output, app.outputDir),
     acquireLock: () => acquireLock(),
     preflight: (install) => preflight(install, { exists: pathExists, which: (cmd) => which(cmd, platform) }),
-    checkRoms: (install, game) => checkRoms(install, game, pathExists),
+    checkRoms: async (install, game) => checkRoms(install, game, await loadRomList(install, (p) => readFile(p, 'utf8').catch(() => null)), pathExists),
     checkTools: () => checkTools(platform, (cmd) => which(cmd, platform)),
     checkWritable: async (dir) => {
       try {
@@ -150,7 +151,7 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
     options.onProgress?.({ phase: 'connecting' });
     const captured = await deps.capture(install, ref, ffmpeg, {
       dir,
-      game: ref.game.id,
+      game: ref.game,
       scale: options.scale,
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,

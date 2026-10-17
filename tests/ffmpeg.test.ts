@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { audioInputRate, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
-import { GAMES } from '../src/constants.js';
 
-const SF3 = GAMES.sfiii3nr1.format;
+const SF3 = { width: 384, height: 224, bpp: 4, fpsX100: 5959, sampleRate: 44100 } as const;
+const GAROU = { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 } as const;
 
 const exec = promisify(execFile);
 const hasFfmpeg = await exec('ffmpeg', ['-version']).then(() => true, () => false);
@@ -27,7 +27,7 @@ describe('ffmpeg arguments', () => {
   });
 
   it('reads raw frames at the game size and rate', () => {
-    const args = videoEncodeArgs({ input: 'i', output: 'o', scale: 'sharp', format: GAMES.garou.format });
+    const args = videoEncodeArgs({ input: 'i', output: 'o', scale: 'sharp', format: GAROU });
     expect(args.slice(args.indexOf('-s'), args.indexOf('-s') + 4)).toEqual(['-s', '320x224', '-r', '59.18']);
   });
 
@@ -45,7 +45,7 @@ describe('ffmpeg arguments', () => {
   // samples-per-frame x fps, not the nominal 44100 Hz (0.17 s drift over 5 minutes of Super SF2X).
   it('derives the real audio rate from the emulator samples per frame', () => {
     expect(audioInputRate(SF3)).toBe(44097); // 740 samples x 59.59 fps
-    expect(audioInputRate(GAMES.garou.format)).toBe(44089); // 745 x 59.18
+    expect(audioInputRate(GAROU)).toBe(44089); // 745 x 59.18
     expect(audioInputRate({ ...SF3, fpsX100: 5963 })).toBe(44126); // 740 x 59.63 (CPS2)
   });
 
