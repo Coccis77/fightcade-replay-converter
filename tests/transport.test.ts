@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { connect } from 'node:net';
 import { mkdtemp } from 'node:fs/promises';
@@ -78,14 +78,16 @@ describe('pipeTransport', () => {
   });
 });
 
-describe('fifoTransport', () => {
+describe.skipIf(process.platform === 'win32')('fifoTransport paths', () => {
   it('makes the FIFO and maps it onto Wine drive Z:', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4 run x-'));
     const made: string[] = [];
-    const t = await fifoTransport('/tmp/run x', async (p) => {
+    const t = await fifoTransport(dir, async (p) => {
       made.push(p);
+      execFileSync('mkfifo', [p]);
     });
-    expect(made).toEqual(['/tmp/run x/video.fifo']);
-    expect(t.emulatorPath).toBe('Z:\\tmp\\run x\\video.fifo');
+    expect(made).toEqual([`${dir}/video.fifo`]);
+    expect(t.emulatorPath).toBe(`Z:${dir.replace(/\//g, '\\')}\\video.fifo`);
     expect(t.encoderInput).toBe('pipe:0'); // fc2mp4 relays the FIFO to ffmpeg's stdin
     await t.close();
   });
@@ -135,6 +137,24 @@ describe.skipIf(process.platform === 'win32')('fifoTransport', () => {
     expect(data().equals(payload)).toBe(true);
     await t.close();
   }, 20_000);
+
+  it('lets the process exit after close() even if the emulator keeps its end open (kill failed)', async () => {
+    const fixture = join(import.meta.dirname, 'fixtures', 'fifo-close.ts');
+    const result = await new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, ['--import', 'tsx', fixture], { stdio: ['ignore', 'pipe', 'inherit'] });
+      let stdout = '';
+      child.stdout.on('data', (d) => (stdout += d));
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new Error(`still running 10 s after close() (stdout: ${JSON.stringify(stdout)})`));
+      }, 10_000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout });
+      });
+    });
+    expect(result).toEqual({ code: 0, stdout: 'closed\n' });
+  }, 15_000);
 
   it('closes without hanging when the emulator never opened the FIFO', async () => {
     const { t } = await fifo();

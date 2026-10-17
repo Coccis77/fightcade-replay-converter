@@ -1,4 +1,4 @@
-import { closeSync, constants, createReadStream, openSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
@@ -16,31 +16,25 @@ export interface VideoTransport {
   close(): Promise<void>;
 }
 
-// fc2mp4 reads the FIFO itself and relays it to ffmpeg's stdin (as on Windows), so the emulator's
-// open of the FIFO never waits for ffmpeg: fc2mp4 can read the game's format before starting it.
-// Until attach() the stream is not read; the emulator waits on the full pipe and nothing is lost.
+// fc2mp4 relays the FIFO to ffmpeg's stdin (as on Windows), so the emulator never waits for ffmpeg:
+// fc2mp4 can read the game's format before starting it. A `cat` child reads the FIFO: its blocking
+// open and reads stay out of Node (a pending FIFO read in Node's thread pool cannot be cancelled, and
+// macOS reports no end-of-file on a FIFO read as a socket), killing it always ends the transport, and
+// it exits at the emulator's end-of-file. Until attach() its output is not read: cat and the emulator
+// wait on full pipes, nothing is lost.
 export async function fifoTransport(dir: string, makeFifo: (p: string) => Promise<void>): Promise<VideoTransport> {
   const fifo = join(dir, 'video.fifo');
   await makeFifo(fifo);
-  let opened = false;
-  const stream = createReadStream(fifo); // the open completes when the emulator opens its end
-  stream.on('open', () => (opened = true));
-  stream.on('error', () => {});
+  const reader = spawn('cat', [fifo], { stdio: ['ignore', 'pipe', 'ignore'] });
+  reader.on('error', () => {});
+  reader.stdout.pause();
   return {
     emulatorPath: winPath(fifo),
     encoderInput: 'pipe:0',
-    attach: (stdin) => relay(stream, stdin),
+    attach: (stdin) => relay(reader.stdout, stdin),
     close: async () => {
-      // No writer ever came: open the write end once so the pending read-side open returns
-      // (otherwise it blocks a libuv thread and Node never exits).
-      if (!opened) {
-        try {
-          closeSync(openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK));
-        } catch {
-          // already unblocked
-        }
-      }
-      stream.destroy();
+      if (reader.exitCode === null && reader.signalCode === null) reader.kill('SIGKILL');
+      reader.stdout.destroy();
     },
   };
 }
