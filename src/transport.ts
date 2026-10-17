@@ -1,3 +1,4 @@
+import { closeSync, constants, createReadStream, openSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
@@ -15,10 +16,33 @@ export interface VideoTransport {
   close(): Promise<void>;
 }
 
+// fc2mp4 reads the FIFO itself and relays it to ffmpeg's stdin (as on Windows), so the emulator's
+// open of the FIFO never waits for ffmpeg: fc2mp4 can read the game's format before starting it.
+// Until attach() the stream is not read; the emulator waits on the full pipe and nothing is lost.
 export async function fifoTransport(dir: string, makeFifo: (p: string) => Promise<void>): Promise<VideoTransport> {
   const fifo = join(dir, 'video.fifo');
   await makeFifo(fifo);
-  return { emulatorPath: winPath(fifo), encoderInput: fifo, attach: () => {}, close: async () => {} };
+  let opened = false;
+  const stream = createReadStream(fifo); // the open completes when the emulator opens its end
+  stream.on('open', () => (opened = true));
+  stream.on('error', () => {});
+  return {
+    emulatorPath: winPath(fifo),
+    encoderInput: 'pipe:0',
+    attach: (stdin) => relay(stream, stdin),
+    close: async () => {
+      // No writer ever came: open the write end once so the pending read-side open returns
+      // (otherwise it blocks a libuv thread and Node never exits).
+      if (!opened) {
+        try {
+          closeSync(openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK));
+        } catch {
+          // already unblocked
+        }
+      }
+      stream.destroy();
+    },
+  };
 }
 
 // Pipe the emulator's bytes into the encoder. A broken connection (emulator killed or crashed)

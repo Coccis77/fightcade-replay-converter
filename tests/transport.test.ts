@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
 import { connect } from 'node:net';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -84,7 +86,8 @@ describe('fifoTransport', () => {
     });
     expect(made).toEqual(['/tmp/run x/video.fifo']);
     expect(t.emulatorPath).toBe('Z:\\tmp\\run x\\video.fifo');
-    expect(t.encoderInput).toBe('/tmp/run x/video.fifo');
+    expect(t.encoderInput).toBe('pipe:0'); // fc2mp4 relays the FIFO to ffmpeg's stdin
+    await t.close();
   });
 });
 
@@ -106,4 +109,35 @@ describe('relay', () => {
     await new Promise((resolve) => target.on('end', resolve));
     expect(Buffer.concat(chunks).toString()).toBe('partial frame');
   });
+});
+
+describe.skipIf(process.platform === 'win32')('fifoTransport', () => {
+  async function fifo() {
+    const dir = await mkdtemp(join(tmpdir(), 'fc2mp4-fifo-'));
+    return fifoTransport(dir, async (p) => {
+      execFileSync('mkfifo', [p]);
+    }).then((t) => ({ t, path: join(dir, 'video.fifo') }));
+  }
+
+  it('relays into the encoder input, even when the encoder is attached after the emulator wrote', async () => {
+    const { t, path } = await fifo();
+    expect(t.encoderInput).toBe('pipe:0');
+    const payload = Buffer.alloc(512 * 1024);
+    for (let i = 0; i < payload.length; i++) payload[i] = i % 251;
+    const writer = createWriteStream(path);
+    const written = new Promise<void>((resolve) => writer.end(payload, () => resolve()));
+    await new Promise((resolve) => setTimeout(resolve, 200)); // emulator already writing, no encoder yet
+    const { sink, data } = slowSink();
+    const finished = new Promise<void>((resolve) => sink.on('finish', () => resolve()));
+    t.attach(sink);
+    await written;
+    await finished;
+    expect(data().equals(payload)).toBe(true);
+    await t.close();
+  }, 20_000);
+
+  it('closes without hanging when the emulator never opened the FIFO', async () => {
+    const { t } = await fifo();
+    await t.close();
+  }, 5_000);
 });
