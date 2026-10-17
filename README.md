@@ -5,16 +5,16 @@ and Linux. Free and non-commercial.
 
 ## Supported games
 
-| Game | Name in the replay link | ROMs needed in Fightcade's `ROMs` folder |
-| --- | --- | --- |
-| Street Fighter III: 3rd Strike | `sfiii3nr1` | `sfiii3nr1.zip`, `sfiii3.zip` |
-| Garou: Mark of the Wolves | `garou` | `garou.zip`, `neogeo.zip` |
-| Super Street Fighter II X: Grand Master Challenge | `ssf2xjr1` | `ssf2xjr1.zip`, `ssf2t.zip` |
-| Street Fighter Alpha 3 | `sfa3` | `sfa3.zip` |
-| Vampire Savior: The Lord of Vampire | `vsavj` | `vsavj.zip`, `vsav.zip` |
+Any horizontal FBNeo arcade game you can play on Fightcade: fc2mp4 reads each game's screen size and
+speed from the emulator, and its ROMs from Fightcade's game list. Vertical games (shoot'em ups like
+DoDonPachi) are not supported yet.
 
-Opening the game once in Fightcade downloads its ROMs. Links look like
-`https://replay.fightcade.com/fbneo/<name>/<id>`. A quark ID alone (`1700000000000-1234`) is read as
+Tested with real replays: Street Fighter III: 3rd Strike (`sfiii3nr1`), Garou: Mark of the Wolves
+(`garou`), Super Street Fighter II X (`ssf2xjr1`), Street Fighter Alpha 3 (`sfa3`), Vampire Savior
+(`vsavj`), Mortal Kombat (`mk`).
+
+Open the game once in Fightcade so it downloads its ROMs. Links look like
+`https://replay.fightcade.com/fbneo/<game>/<id>`; a quark ID alone (`1700000000000-1234`) is read as
 3rd Strike.
 
 ## Install
@@ -28,7 +28,9 @@ Opening the game once in Fightcade downloads its ROMs. Links look like
   packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg`.
   Point it at Fightcade's files with `--fightcade-dir` (or `FC2MP4_FIGHTCADE_DIR`): either a Fightcade
   folder, or a copy of its `emulator/fbneo` folder containing `ggponet.dll` and the game's ROMs in
-  `ROMs/` (see [Supported games](#supported-games)). No screen or sound device is needed.
+  `ROMs/` (see [Supported games](#supported-games)) and, optionally, Fightcade's `emulator/fbneo_roms.json`
+  copied into that folder, so fc2mp4 can tell which parent or BIOS files each game needs. No screen or
+  sound device is needed.
 
 Windows and macOS need Fightcade 2 installed, with the game opened once.
 
@@ -164,8 +166,9 @@ docker run -d --name fc2mp4 --restart unless-stopped \
 ```
 
 `/srv/fc2mp4/fightcade` holds a copy of Fightcade's `emulator/fbneo` folder: its DLLs (`ggponet.dll`…) and
-the ROMs of the games you want to offer in `ROMs/` (see [Supported games](#supported-games)). Set `TZ` to
-your time zone (the daily limits reset at midnight).
+the ROMs of the games you want to offer in `ROMs/` (see [Supported games](#supported-games)), and
+optionally Fightcade's `emulator/fbneo_roms.json` copied into it, so fc2mp4 can tell which parent or BIOS
+files each game needs. Set `TZ` to your time zone (the daily limits reset at midnight).
 
 `FC2MP4_TRUST_PROXY=1` tells fc2mp4 that it is only reachable through the web server in front, so it uses
 the visitor's address for the login limit and knows when the connection is HTTPS (secure cookie). Only set

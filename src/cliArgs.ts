@@ -10,8 +10,8 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 serve [--port <n>] [--host <addr>] [--keep <d>] [--fightcade-dir <p>] [-v]
        fc2mp4 reset-admin
 
-Records a Fightcade replay (3rd Strike, Garou: Mark of the Wolves, Super Street Fighter II X, Street Fighter Alpha 3 or Vampire Savior) to MP4 (macOS, Windows and Linux).
-Pass the replay link; a quark ID alone means 3rd Strike.
+Records a Fightcade FBNeo replay to MP4 (macOS, Windows and Linux).
+Pass the replay link; a quark ID alone means 3rd Strike. Vertical games are not supported yet.
 
   -o, --output <path>       MP4 file, or an existing folder
                             (default: FC2MP4_OUTPUT_DIR, else ~/Movies/Fightcade, %USERPROFILE%\\Videos\\Fightcade or ~/Videos/Fightcade)
