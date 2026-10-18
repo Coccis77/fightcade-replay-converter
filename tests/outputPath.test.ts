@@ -7,16 +7,16 @@ const never = async () => false;
 
 describe('resolveOutputPath', () => {
   it('defaults to <defaultDir>/<quarkId>.mp4', async () => {
-    expect(await resolveOutputPath('1-2', undefined, DEFAULT, never)).toBe(`${DEFAULT}/1-2.mp4`);
+    expect(await resolveOutputPath('1-2', undefined, DEFAULT, never)).toEqual({ path: `${DEFAULT}/1-2.mp4`, userFile: false });
   });
   it('treats an existing directory as the target folder', async () => {
-    expect(await resolveOutputPath('1-2', '/tmp/out', DEFAULT, async (p) => p === '/tmp/out')).toBe('/tmp/out/1-2.mp4');
+    expect(await resolveOutputPath('1-2', '/tmp/out', DEFAULT, async (p) => p === '/tmp/out')).toEqual({ path: '/tmp/out/1-2.mp4', userFile: false });
   });
   it('treats a trailing separator as a folder', async () => {
-    expect(await resolveOutputPath('1-2', '/tmp/new/', DEFAULT, never)).toBe('/tmp/new/1-2.mp4');
+    expect(await resolveOutputPath('1-2', '/tmp/new/', DEFAULT, never)).toEqual({ path: '/tmp/new/1-2.mp4', userFile: false });
   });
   it('keeps an explicit file path and makes relative paths absolute', async () => {
-    expect(await resolveOutputPath('1-2', '/tmp/final.mp4', DEFAULT, never)).toBe('/tmp/final.mp4');
-    expect(await resolveOutputPath('1-2', 'clips/a.mp4', DEFAULT, never)).toBe(resolve('clips/a.mp4'));
+    expect(await resolveOutputPath('1-2', '/tmp/final.mp4', DEFAULT, never)).toEqual({ path: '/tmp/final.mp4', userFile: true });
+    expect(await resolveOutputPath('1-2', 'clips/a.mp4', DEFAULT, never)).toEqual({ path: resolve('clips/a.mp4'), userFile: true });
   });
 });

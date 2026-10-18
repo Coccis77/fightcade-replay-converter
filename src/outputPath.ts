@@ -14,9 +14,10 @@ export async function resolveOutputPath(
   output: string | undefined,
   defaultDir: string,
   isDir: (p: string) => Promise<boolean> = isDirectory,
-): Promise<string> {
+): Promise<{ path: string; userFile: boolean }> {
+  // A folder gets <quarkId>.mp4 for now; the final name (players, date) is known once the replay started.
   const fileName = `${quarkId}.mp4`;
-  if (output === undefined) return join(defaultDir, fileName);
-  if (output.endsWith('/') || output.endsWith(sep) || (await isDir(output))) return resolve(output, fileName);
-  return resolve(output);
+  if (output === undefined) return { path: join(defaultDir, fileName), userFile: false };
+  if (output.endsWith('/') || output.endsWith(sep) || (await isDir(output))) return { path: resolve(output, fileName), userFile: false };
+  return { path: resolve(output), userFile: true };
 }

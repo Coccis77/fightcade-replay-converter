@@ -7,6 +7,8 @@ static FILE* fAudio = NULL;
 static bool bChecked = false;
 static bool bActive = false;
 static bool bInfoWritten = false;
+static char szPlayer1[64] = "";
+static char szPlayer2[64] = "";
 static UINT32 nDumpedFrames = 0;
 static DWORD nLastFrameTick = 0;
 static DWORD nIdleMs = 5000;
@@ -30,6 +32,21 @@ int Fc2mp4DumpActive()
 	return bActive;
 }
 
+// The two player names from the stream's match info (arrives before the first frame), for the video's
+// file name. Line breaks would break the info file: they become spaces.
+static void CopyPlayer(char* dest, const char* name)
+{
+	int i = 0;
+	for (; name && name[i] && i < 63; i++) dest[i] = (name[i] == '\r' || name[i] == '\n') ? ' ' : name[i];
+	dest[i] = '\0';
+}
+
+void Fc2mp4DumpSetPlayers(const char* p1, const char* p2)
+{
+	CopyPlayer(szPlayer1, p1);
+	CopyPlayer(szPlayer2, p2);
+}
+
 static void WriteInfo()
 {
 	bInfoWritten = true;
@@ -37,8 +54,9 @@ static void WriteInfo()
 	if (!path || !*path) return;
 	FILE* f = fopen(path, "w");
 	if (!f) return;
-	fprintf(f, "width=%d\nheight=%d\nbpp=%d\nfps_x100=%d\nsample_rate=%d\n",
-		nVidImageWidth, nVidImageHeight, nVidImageBPP, nBurnFPS, nBurnSoundRate);
+	// sample_rate stays last: fc2mp4 reads the file once that line is there.
+	fprintf(f, "p1=%s\np2=%s\nwidth=%d\nheight=%d\nbpp=%d\nfps_x100=%d\nsample_rate=%d\n",
+		szPlayer1, szPlayer2, nVidImageWidth, nVidImageHeight, nVidImageBPP, nBurnFPS, nBurnSoundRate);
 	fclose(f);
 }
 

@@ -179,6 +179,17 @@ describe('capture', () => {
     });
   });
 
+  it('reads both player names from the info file', async () => {
+    const info = 'p1=PlayerA\np2=Player B\nwidth=384\nheight=224\nbpp=4\nfps_x100=5959\nsample_rate=44100\n';
+    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000, info });
+    expect((await capture(deps, base)).players).toEqual({ p1: 'PlayerA', p2: 'Player B' });
+  });
+
+  it('has no players when the emulator does not report them (older build)', async () => {
+    const { deps } = harness({ infoAt: 1_000, emulatorExitsAt: 10_000 });
+    expect((await capture(deps, base)).players).toBeNull();
+  });
+
   it('starts ffmpeg only after the emulator reported its format, at that format', async () => {
     const info = 'width=400\nheight=254\nbpp=4\nfps_x100=5471\nsample_rate=44100\n';
     const { deps, log } = harness({ infoAt: 3_000, emulatorExitsAt: 10_000, info });

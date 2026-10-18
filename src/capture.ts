@@ -9,6 +9,7 @@ import { run } from './exec.js';
 import { ffmpegFailureReason, parseInfo, validateFormat, type EncoderName, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
+import { playersFromInfo, type Players } from './videoName.js';
 import { streamArg, type ReplayRef } from './replayRef.js';
 import { wineEnv, withoutDisplay } from './winePrefix.js';
 import { fifoTransport, pipeName, pipeTransport, winPath, type VideoTransport } from './transport.js';
@@ -47,6 +48,7 @@ export interface CaptureResult {
   audio: string;
   frames: number;
   format: FrameFormat; // as the emulator reported it
+  players: Players | null; // as Fightcade's server named them; null from an older emulator build
   endReason: 'ended' | 'max-duration';
 }
 
@@ -100,6 +102,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
   const transport = await deps.openTransport(opts.dir);
   let frames = 0;
   let format: FrameFormat | null = null;
+  let players: Players | null = null;
   let encoder: CaptureProcess | null = null;
   // The emulator first, ffmpeg once the emulator reported the game's format (the transport holds
   // the frames meanwhile).
@@ -123,6 +126,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
           const reported = parseInfo(text);
           validateFormat(reported, opts.game);
           format = reported;
+          players = playersFromInfo(text);
           encoder = deps.startEncoder(
             videoEncodeArgs({ input: transport.encoderInput, output: video, scale: opts.scale, format, encoder: opts.encoder }),
             (n) => (frames = n),
@@ -175,7 +179,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
     // The loop only leaves normally once the format is known, so ffmpeg runs.
     const code = await encoder!.wait();
     if (code !== 0) throw new ConvertError(ExitCode.Encode, `The video encoder failed (exit ${code})`);
-    return { video, audio, frames, format: format!, endReason };
+    return { video, audio, frames, format: format!, players, endReason };
   } finally {
     if (!emulator.exited) await emulator.kill().catch(() => {});
     if (encoder !== null && !encoder.exited) await encoder.kill().catch(() => {});

@@ -97,6 +97,9 @@ Videos go to `~/Videos/Fightcade`.
 ### Options
 
 - `-o <file or folder>`: where to write the MP4 (default: the folder above, or `FC2MP4_OUTPUT_DIR`).
+  In a folder, videos are named `<game> - <player 1> vs <player 2> - <date> - <quark ID>.mp4`
+  (e.g. `garou - iorimg6680 vs WhiteGriffith - 2026-10-12 - 1791766846976-7757.mp4`); with a file name,
+  that name is used as is.
 - `--fightcade-dir <path>`: where Fightcade is, when it is not found by itself.
 - `--scale sharp|smooth`: upscaling style (default `sharp`).
 - `--encoder <name>`: video encoder. `auto` (the default) uses an NVIDIA graphics card on Windows when

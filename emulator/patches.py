@@ -55,6 +55,14 @@ PATCHES = [
         replacement='int Fc2mp4DumpActive();\nvoid Fc2mp4DumpEndAndExit();\n\n'
         'void QuarkFinishReplay()\n{\n\tif (Fc2mp4DumpActive()) {\n\t\tFc2mp4DumpEndAndExit();\n\t}\n',
     ),
+    # The player names from the match info, for the video's file name (fc2mp4_dump.cpp).
+    Patch(
+        name='players-from-match-info',
+        file='src/burner/win32/fbn_ggpo.cpp',
+        anchor='\tcase GGPOCLIENT_EVENTCODE_MATCHINFO: {\n',
+        replacement='\tcase GGPOCLIENT_EVENTCODE_MATCHINFO: {\n'
+        '\t\t{ extern void Fc2mp4DumpSetPlayers(const char* p1, const char* p2); Fc2mp4DumpSetPlayers(info->u.matchinfo.p1, info->u.matchinfo.p2); }\n',
+    ),
     # While recording: a silent audio plugin and a memory-only video plugin (fc2mp4_headless.cpp),
     # selected only when the dump is active. Nothing is played or shown.
     Patch(

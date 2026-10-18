@@ -18,6 +18,7 @@ import { resolveOutputPath } from './outputPath.js';
 import { appPaths, supportedPlatform } from './platform.js';
 import { parseReplayRef, type ReplayRef } from './replayRef.js';
 import { prepareRuntime } from './runtime.js';
+import { videoFileName } from './videoName.js';
 import { loadRomList } from './romList.js';
 import { ensureWinePrefix } from './winePrefix.js';
 
@@ -49,7 +50,7 @@ export interface ConvertResult {
 
 export interface ConvertDeps {
   locateInstall(override?: string): Promise<FightcadeInstall>;
-  resolveOutput(quarkId: string, output?: string): Promise<string>;
+  resolveOutput(quarkId: string, output?: string): Promise<{ path: string; userFile: boolean }>;
   acquireLock(): Promise<() => Promise<void>>;
   preflight(install: FightcadeInstall): Promise<void>;
   checkRoms(install: FightcadeInstall, game: string): Promise<void>;
@@ -130,7 +131,8 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
   const log = options.log ?? (() => {});
   const debug = options.debug ?? (() => {});
   const install = await deps.locateInstall(options.fightcadeDir);
-  const output = await deps.resolveOutput(ref.quarkId, options.output);
+  const resolved = await deps.resolveOutput(ref.quarkId, options.output);
+  let output = resolved.path;
   debug(`Fightcade: ${install.root}`);
   debug(`Output: ${output}`);
 
@@ -165,6 +167,9 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
     });
     if (captured.endReason === 'max-duration') log('Warning: reached --max-duration; the video may be cut short');
 
+    // Saved to a folder: named after the game, the players and the date, keeping the quark ID.
+    if (!resolved.userFile) output = join(dirname(output), videoFileName({ game: ref.game, quarkId: ref.quarkId, players: captured.players }));
+    debug(`Video: ${output}`);
     options.onProgress?.({ phase: 'finalizing' });
     await deps.mkdir(dirname(output));
     await deps.mux({ video: captured.video, audio: captured.audio, output, format: captured.format }, ffmpeg);

@@ -12,7 +12,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
   const calls: string[] = [];
   const deps: ConvertDeps = {
     locateInstall: async () => install,
-    resolveOutput: async (quarkId) => `/out/${quarkId}.mp4`,
+    resolveOutput: async (quarkId) => ({ path: `/out/${quarkId}.mp4`, userFile: true }),
     acquireLock: async () => {
       calls.push('lock');
       return async () => {
@@ -57,7 +57,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
     capture: async (_install, ref, _ffmpeg, opts) => {
       calls.push(`capture:${opts.game}:${ref.quarkId}:${opts.dir}`);
       calls.push(`capture-encoder:${opts.encoder}`);
-      return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, format: SF3_FORMAT, endReason: 'ended' };
+      return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, format: SF3_FORMAT, players: null, endReason: 'ended' };
     },
     mkdir: async (dir) => {
       calls.push(`mkdir:${dir}`);
@@ -94,6 +94,23 @@ describe('convert', () => {
     expect(forced.calls).toContain('capture-encoder:x264');
   });
 
+  it('names a video saved to a folder after the game, the players, the date and the quark ID', async () => {
+    const { deps, calls } = harness({
+      resolveOutput: async (quarkId) => ({ path: `/out/${quarkId}.mp4`, userFile: false }),
+      capture: async () => ({ video: 'v', audio: 'a', frames: 10, format: SF3_FORMAT, players: { p1: 'A', p2: 'B/C' }, endReason: 'ended' }),
+    });
+    const result = await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps);
+    expect(result.output).toBe(`/out/garou - A vs B_C - 2023-11-14 - ${ID}.mp4`);
+    expect(calls).toContain(`mux:/out/garou - A vs B_C - 2023-11-14 - ${ID}.mp4:5959`);
+  });
+
+  it('keeps a file name chosen with -o (and the server\'s <quark ID>.mp4)', async () => {
+    const { deps } = harness({
+      capture: async () => ({ video: 'v', audio: 'a', frames: 10, format: SF3_FORMAT, players: { p1: 'A', p2: 'B' }, endReason: 'ended' }),
+    });
+    expect((await convert(ID, baseOptions, deps)).output).toBe(`/out/${ID}.mp4`);
+  });
+
   it('captures the game from the link', async () => {
     const { deps, calls } = harness();
     await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, baseOptions, deps);
@@ -105,7 +122,7 @@ describe('convert', () => {
     const { deps } = harness({
       capture: async (_install, _ref, _ffmpeg, opts) => {
         opts.onProgress?.(35508, 600, 60_000);
-        return { video: 'v', audio: 'a', frames: 35508, format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 }, endReason: 'ended' };
+        return { video: 'v', audio: 'a', frames: 35508, format: { width: 320, height: 224, bpp: 4, fpsX100: 5918, sampleRate: 44100 }, players: null, endReason: 'ended' };
       },
     });
     const result = await convert(`https://replay.fightcade.com/fbneo/garou/${ID}`, { ...baseOptions, onProgress: (e) => events.push(e) }, deps);
@@ -211,7 +228,7 @@ describe('convert', () => {
   it('warns when max-duration cut the capture short', async () => {
     const logs: string[] = [];
     const { deps } = harness({
-      capture: async () => ({ video: 'v', audio: 'a', frames: 10, format: SF3_FORMAT, endReason: 'max-duration' }),
+      capture: async () => ({ video: 'v', audio: 'a', frames: 10, format: SF3_FORMAT, players: null, endReason: 'max-duration' }),
     });
     await convert(ID, { ...baseOptions, log: (m) => logs.push(m) }, deps);
     expect(logs.some((m) => m.includes('--max-duration'))).toBe(true);
