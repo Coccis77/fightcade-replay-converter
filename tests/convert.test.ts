@@ -35,6 +35,10 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push(signal ? 'ffmpeg:signal' : 'ffmpeg');
       return '/usr/bin/ffmpeg';
     },
+    resolveEncoder: async (choice) => {
+      calls.push(`encoder:${choice}`);
+      return choice === 'auto' ? 'nvenc' : choice;
+    },
     ensureEmulator: async (_install, opts) => {
       calls.push(`ensure:${opts.force}:${opts.local}`);
       return { updated: false };
@@ -52,6 +56,7 @@ function harness(over: Partial<ConvertDeps> = {}) {
     },
     capture: async (_install, ref, _ffmpeg, opts) => {
       calls.push(`capture:${opts.game}:${ref.quarkId}:${opts.dir}`);
+      calls.push(`capture-encoder:${opts.encoder}`);
       return { video: '/tmp/run/video.mp4', audio: '/tmp/run/audio.raw', frames: 8220, format: SF3_FORMAT, endReason: 'ended' };
     },
     mkdir: async (dir) => {
@@ -74,9 +79,19 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`,
+      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'encoder:auto', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`, 'capture-encoder:nvenc',
       'mkdir:/out', `mux:/out/${ID}.mp4:5959`, 'rmdir:/tmp/run', 'unlock',
     ]);
+  });
+
+  it('captures with the encoder auto resolved to, or the one asked for', async () => {
+    const auto = harness();
+    await convert(ID, baseOptions, auto.deps);
+    expect(auto.calls).toContain('capture-encoder:nvenc');
+    const forced = harness();
+    await convert(ID, { ...baseOptions, encoder: 'x264' }, forced.deps);
+    expect(forced.calls).toContain('encoder:x264');
+    expect(forced.calls).toContain('capture-encoder:x264');
   });
 
   it('captures the game from the link', async () => {

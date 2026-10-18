@@ -98,6 +98,7 @@ export function defaultServeDeps(options: ServeOptions): ServeDeps {
       await convert(ref, {
         output,
         scale: 'sharp',
+        encoder: 'x264', // servers and Docker have no GPU: never probe one
         maxDurationMs: DEFAULT_MAX_DURATION_MS,
         fightcadeDir: options.fightcadeDir,
         signal: options.signal,

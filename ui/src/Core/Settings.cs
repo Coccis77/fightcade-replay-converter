@@ -10,7 +10,7 @@ namespace Fc2mp4Ui
         public string Exe { get; set; } = "";
         public string FightcadeFolder { get; set; } = "";
         public string OutputFolder { get; set; } = "";
-        public string Encoder { get; set; } = "x264";
+        public string Encoder { get; set; } = "auto";
 
         public static Settings Load(string path, string defaultExe, string defaultOutput)
         {

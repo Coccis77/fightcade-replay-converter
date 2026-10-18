@@ -7,7 +7,7 @@ import type { FrameFormat } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
 import { currentPatchSetHash } from './patchSet.js';
-import { mux, type EncoderName, type ScaleMode } from './ffmpeg.js';
+import { mux, probeEncoder, resolveEncoder, type EncoderChoice, type EncoderName, type ScaleMode } from './ffmpeg.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run, which } from './exec.js';
 import { defaultFfmpegDeps, locateFfmpeg } from './ffmpegLocator.js';
@@ -31,7 +31,7 @@ export type ProgressEvent =
 export interface ConvertOptions {
   output?: string;
   scale: ScaleMode;
-  encoder?: EncoderName;
+  encoder?: EncoderChoice; // auto when not set
   maxDurationMs: number;
   fightcadeDir?: string;
   signal?: AbortSignal;
@@ -56,6 +56,7 @@ export interface ConvertDeps {
   checkWritable(dir: string): Promise<void>;
   checkTools(): Promise<void>;
   locateFfmpeg(install: FightcadeInstall | null, signal?: AbortSignal): Promise<string>;
+  resolveEncoder(choice: EncoderChoice, ffmpeg: string): Promise<EncoderName>;
   ensureEmulator(install: FightcadeInstall | null, opts: { force: boolean; local: boolean; signal?: AbortSignal }): Promise<EnsureResult>;
   prepareRuntime(install: FightcadeInstall, refreshDlls: boolean): Promise<void>;
   prepareWine(install: FightcadeInstall | null, onSetup: () => void, signal?: AbortSignal): Promise<void>;
@@ -92,6 +93,7 @@ export function defaultDeps(): ConvertDeps {
       }
     },
     locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),
+    resolveEncoder: (choice, ffmpeg) => resolveEncoder(choice, process.platform, (encoder) => probeEncoder(encoder, ffmpeg)),
     ensureEmulator: async (install, opts) => {
       const dir = emulatorDir();
       const hash = await currentPatchSetHash(emulatorDir);
@@ -142,6 +144,8 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
     options.onProgress?.({ phase: 'preparing' });
     const ffmpeg = await deps.locateFfmpeg(install, options.signal);
     debug(`ffmpeg: ${ffmpeg}`);
+    const encoder = await deps.resolveEncoder(options.encoder ?? 'auto', ffmpeg);
+    debug(`Encoder: ${encoder}`);
     const ensured = await deps.ensureEmulator(install, { force: false, local: false, signal: options.signal });
     if (ensured.warning) log(`Warning: ${ensured.warning}`);
     if (ensured.updated) debug('Emulator updated');
@@ -154,7 +158,7 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
       dir,
       game: ref.game,
       scale: options.scale,
-      encoder: options.encoder,
+      encoder,
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,
       onProgress: (frames, seconds, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds, elapsedMs }),

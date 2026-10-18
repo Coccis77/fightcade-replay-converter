@@ -97,9 +97,11 @@ Videos go to `~/Videos/Fightcade`.
 - `-o <file or folder>`: where to write the MP4 (default: the folder above, or `FC2MP4_OUTPUT_DIR`).
 - `--fightcade-dir <path>`: where Fightcade is, when it is not found by itself.
 - `--scale sharp|smooth`: upscaling style (default `sharp`).
-- `--encoder <name>`: video encoder. `x264` (CPU, the default, works everywhere), or a hardware encoder:
-  `nvenc` (NVIDIA), `qsv` (Intel), `amf` (AMD), `mf` (Windows, any GPU), `videotoolbox` (macOS). Hardware
-  encoders can be faster but make bigger files; if one isn't available on your computer, fc2mp4 says so.
+- `--encoder <name>`: video encoder. `auto` (the default) uses an NVIDIA graphics card on Windows when
+  there is one (`nvenc`: about 25% faster, same quality, files slightly bigger) and `x264` (your
+  processor, works everywhere) otherwise. You can also choose `x264`, `nvenc`, `qsv` (Intel graphics),
+  `amf` (AMD graphics), `mf` (Windows, any graphics card) or `videotoolbox` (macOS); if one isn't
+  available on your computer, fc2mp4 says so.
 - `--max-duration <d>`: stop after this long, e.g. `90s`, `45m`, `1h` (default `60m`).
 - `-v`: print debug details. `--help` lists every command and option.
 

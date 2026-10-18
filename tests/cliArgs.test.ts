@@ -38,7 +38,7 @@ describe('parseCli', () => {
       maxDurationMs: DEFAULT_MAX_DURATION_MS,
       fightcadeDir: undefined,
       stopOnStdinClose: false,
-      encoder: 'x264',
+      encoder: 'auto',
       verbose: false,
     });
   });
@@ -51,14 +51,14 @@ describe('parseCli', () => {
       maxDurationMs: 1_200_000,
       fightcadeDir: '/F',
       stopOnStdinClose: false,
-      encoder: 'x264',
+      encoder: 'auto',
       verbose: true,
     });
   });
-  it('reads --encoder, x264 by default', () => {
-    expect(parseCli(['1-2'])).toMatchObject({ encoder: 'x264' });
+  it('reads --encoder, auto by default', () => {
+    expect(parseCli(['1-2'])).toMatchObject({ encoder: 'auto' });
     expect(parseCli(['1-2', '--encoder', 'nvenc'])).toMatchObject({ encoder: 'nvenc' });
-    expect(usageError(['1-2', '--encoder', 'divx'])).toMatchObject({ exitCode: ExitCode.Usage, message: 'Invalid --encoder "divx"', hint: 'Use x264, nvenc, qsv, amf, mf or videotoolbox' });
+    expect(usageError(['1-2', '--encoder', 'divx'])).toMatchObject({ exitCode: ExitCode.Usage, message: 'Invalid --encoder "divx"', hint: 'Use auto, x264, nvenc, qsv, amf, mf or videotoolbox' });
     expect(USAGE).toContain('--encoder <name>');
   });
   it('reads --stop-on-stdin-close for a conversion only', () => {

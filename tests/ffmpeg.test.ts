@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { audioInputRate, ENCODERS, encoderArgs, ffmpegFailureReason, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
+import { audioInputRate, ENCODERS, encoderArgs, ffmpegFailureReason, mux, probeArgs, resolveEncoder, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
 
@@ -35,7 +35,7 @@ describe('ffmpeg arguments', () => {
 
   it.each([
     ['x264', ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']],
-    ['nvenc', ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '20', '-b:v', '0', '-pix_fmt', 'yuv420p']],
+    ['nvenc', ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '28', '-b:v', '0', '-pix_fmt', 'yuv420p']],
     ['qsv', ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '20', '-pix_fmt', 'nv12']],
     ['amf', ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '20', '-qp_p', '20', '-pix_fmt', 'nv12']],
     ['mf', ['-c:v', 'h264_mf', '-hw_encoding', '1', '-rate_control', 'quality', '-quality', '80', '-pix_fmt', 'nv12']],
@@ -59,9 +59,11 @@ describe('ffmpeg arguments', () => {
     expect(ffmpegFailureReason([])).toBe('');
   });
 
-  it('takes an NVENC quality from FC2MP4_NVENC_CQ (temporary, for testing sizes)', () => {
-    expect(encoderArgs('nvenc', { FC2MP4_NVENC_CQ: '26' })).toContain('26');
-    expect(encoderArgs('nvenc', { FC2MP4_NVENC_CQ: 'junk' })[encoderArgs('nvenc', {}).indexOf('-cq') + 1]).toBe('20');
+  it('tries an encoder on one tiny frame', () => {
+    expect(probeArgs('nvenc')).toEqual([
+      '-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=256x144:r=30', '-frames:v', '1',
+      ...encoderArgs('nvenc'), '-f', 'null', '-',
+    ]);
   });
 
   it('lists every encoder, x264 first (the default)', () => {
@@ -169,4 +171,23 @@ describe.skipIf(!hasFfmpeg)('encode + mux (real ffmpeg)', () => {
     expect(await readFile(output, 'utf8')).toBe('OLD VIDEO');
     expect(await pathExists(partPath(output))).toBe(false);
   }, 60_000);
+});
+
+describe('resolveEncoder', () => {
+  it('keeps an explicit choice without trying anything', async () => {
+    let probed = false;
+    expect(await resolveEncoder('qsv', 'win32', async () => (probed = true))).toBe('qsv');
+    expect(probed).toBe(false);
+  });
+  it('auto on Windows: NVENC when it works, otherwise x264', async () => {
+    expect(await resolveEncoder('auto', 'win32', async (e) => e === 'nvenc')).toBe('nvenc');
+    expect(await resolveEncoder('auto', 'win32', async () => false)).toBe('x264');
+  });
+  it('auto on macOS and Linux: x264, without trying NVENC', async () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+      let probed = false;
+      expect(await resolveEncoder('auto', platform, async () => (probed = true))).toBe('x264');
+      expect(probed).toBe(false);
+    }
+  });
 });

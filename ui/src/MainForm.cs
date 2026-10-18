@@ -30,6 +30,7 @@ namespace Fc2mp4Ui
         readonly TextBox fightcade = new TextBox { Dock = DockStyle.Fill };
         readonly TextBox output = new TextBox { Dock = DockStyle.Fill };
         readonly ComboBox encoder = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        readonly Label encoderHelp = new Label { AutoSize = true, MaximumSize = new Size(560, 0), ForeColor = SystemColors.GrayText };
         readonly Label exeVersionLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
         readonly LinkLabel downloadLink = new LinkLabel { Text = "Download the latest fc2mp4", AutoSize = true, Anchor = AnchorStyles.Left };
 
@@ -57,6 +58,8 @@ namespace Fc2mp4Ui
             fightcade.Text = settings.FightcadeFolder;
             encoder.Items.AddRange(Encoders.Labels);
             encoder.SelectedIndex = Array.IndexOf(Encoders.Names, settings.Encoder);
+            encoderHelp.Text = Encoders.Describe(settings.Encoder);
+            encoder.SelectedIndexChanged += (s, e) => encoderHelp.Text = Encoders.Describe(SelectedEncoder());
             output.Text = settings.OutputFolder;
 
             AcceptButton = convert;
@@ -120,9 +123,11 @@ namespace Fc2mp4Ui
             grid.Controls.Add(new Label { Text = "Encoder", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
             grid.Controls.Add(encoder, 1, 3);
             grid.SetColumnSpan(encoder, 2);
-            grid.Controls.Add(versionRow, 1, 4);
+            grid.Controls.Add(encoderHelp, 1, 4);
+            grid.SetColumnSpan(encoderHelp, 2);
+            grid.Controls.Add(versionRow, 1, 5);
             grid.SetColumnSpan(versionRow, 2);
-            grid.Controls.Add(help, 0, 5);
+            grid.Controls.Add(help, 0, 6);
             grid.SetColumnSpan(help, 3);
             group.Controls.Add(grid);
             root.Controls.Add(group);
@@ -243,7 +248,7 @@ namespace Fc2mp4Ui
             await runner.CancelAsync();
         }
 
-        string SelectedEncoder() => encoder.SelectedIndex >= 0 ? Encoders.Names[encoder.SelectedIndex] : "x264";
+        string SelectedEncoder() => encoder.SelectedIndex >= 0 ? Encoders.Names[encoder.SelectedIndex] : "auto";
 
         Settings CurrentSettings() => new Settings { Exe = exe.Text.Trim(), FightcadeFolder = fightcade.Text.Trim(), OutputFolder = output.Text.Trim(), Encoder = SelectedEncoder() };
 
