@@ -22,13 +22,15 @@ namespace Fc2mp4Ui
         readonly List<Button> browseButtons = new List<Button>();
         readonly NotifyIcon notifier = new NotifyIcon { Icon = SystemIcons.Application, Text = "fc2mp4" };
 
-        readonly FlowLayoutPanel updateBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Visible = false, BackColor = SystemColors.Info, Padding = new Padding(4), WrapContents = false };
-        readonly Label updateText = new Label { AutoSize = true, Padding = new Padding(0, 6, 8, 0) };
+        // Wraps, and the text is capped, so the buttons ("Download from GitHub" after a failure) stay visible.
+        readonly FlowLayoutPanel updateBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Visible = false, BackColor = SystemColors.Info, Padding = new Padding(4), WrapContents = true };
+        readonly Label updateText = new Label { AutoSize = true, MaximumSize = new Size(560, 0), Padding = new Padding(0, 6, 8, 0) };
         readonly Button updateNow = new Button { Text = "Update now", AutoSize = true };
         readonly Button updateLater = new Button { Text = "Later", AutoSize = true };
         readonly Button updateGitHub = new Button { Text = "Download from GitHub", AutoSize = true, Visible = false };
 
-        readonly TextBox links = new TextBox { Dock = DockStyle.Fill, Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, Height = 64 };
+        // MinimumSize, not Height: an auto-sized layout row sizes a TextBox to one line otherwise.
+        readonly TextBox links = new TextBox { Dock = DockStyle.Fill, Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, MinimumSize = new Size(0, 64) };
         readonly Button convert = new Button { Text = "Convert", AutoSize = true };
         readonly Button cancel = new Button { Text = "Cancel", AutoSize = true, Enabled = false };
         readonly Label status = new Label { Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };

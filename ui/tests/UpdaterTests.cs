@@ -31,7 +31,7 @@ namespace Fc2mp4Ui.Tests
         public void DownloadsTheExactVersionsInstaller()
         {
             Assert.Equal("https://github.com/Coccis77/fightcade-replay-converter/releases/download/v0.19.0/fc2mp4-setup.exe", Updater.SetupUrl(new Version(0, 19, 0)));
-            Assert.Equal("/VERYSILENT /SUPPRESSMSGBOXES /NORESTART", Updater.SilentArgs);
+            Assert.Equal("/SILENT /SUPPRESSMSGBOXES /NORESTART", Updater.SilentArgs); // a progress window, and the installer's own errors
         }
 
         [Fact]

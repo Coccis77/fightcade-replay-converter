@@ -60,7 +60,7 @@ The window is no longer a separate download. Release notes start: "Windows: down
 - Update now: download `https://github.com/Coccis77/fightcade-replay-converter/releases/download/vX/fc2mp4-setup.exe`
   to the temp folder with progress ("Downloading the update… 45%"); check it is complete (the length
   announced by the server) and a Windows program (starts with `MZ`); start it with
-  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`; close the window. The installer replaces the files and
+  `/SILENT /SUPPRESSMSGBOXES /NORESTART` (a progress window, no wizard pages); close the window. The installer replaces the files and
   reopens the window.
 - After the restart, the status line says "Updated to vX" once (the window remembers the version it
   last ran in its settings file).

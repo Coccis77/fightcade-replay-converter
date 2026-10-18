@@ -6,7 +6,9 @@ namespace Fc2mp4Ui
     // and reopens the window). A local build (version 0.0.0) never updates.
     public static class Updater
     {
-        public const string SilentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
+        // /SILENT: no wizard pages, but a progress window and the installer's own error messages, so the
+        // seconds between the window closing and reopening are not blank.
+        public const string SilentArgs = "/SILENT /SUPPRESSMSGBOXES /NORESTART";
 
         static Version Short(Version v) => new Version(v.Major, v.Minor, Math.Max(v.Build, 0));
 
