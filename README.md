@@ -19,10 +19,11 @@ Open the game once in Fightcade so it downloads its ROMs. Links look like
 
 ## Install
 
-- **Windows:** download `fc2mp4.exe` from the latest `v*` release on the
-  [releases page](https://github.com/Coccis77/fightcade-replay-converter/releases). Windows may warn
-  that it is unsigned: click *More info* → *Run anyway*. ffmpeg and the emulator are downloaded on
-  first use. Also download `fc2mp4-ui.exe` into the same folder for a window instead of PowerShell.
+- **Windows:** download `fc2mp4-setup.exe` from the latest release on the
+  [releases page](https://github.com/Coccis77/fightcade-replay-converter/releases) and run it. Windows may
+  warn that it is unsigned: click *More info* → *Run anyway*. It installs for your Windows account (no
+  administrator rights), adds fc2mp4 to the Start menu, and offers each new version when you open it.
+  ffmpeg and the emulator are downloaded on the first conversion.
 - **macOS:** download `fc2mp4-macos-arm64`, `chmod +x` it, and install ffmpeg (`brew install ffmpeg`).
 - **Linux (x86_64, headless):** download `fc2mp4-linux-x64`, `chmod +x` it, and install the system
   packages once: `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine wine32:i386 ffmpeg`.
@@ -38,38 +39,39 @@ Windows and macOS need Fightcade 2 installed, with the game opened once.
 
 ### Windows
 
-**The easy way:** put `fc2mp4.exe` and `fc2mp4-ui.exe` in the same folder and open `fc2mp4-ui.exe`.
-Paste the replay link and press **Convert**; the console shows the progress, and **Open video**
-opens the result. The folders (Fightcade, videos) are under **Settings** and are remembered.
-Leave *Fightcade folder* empty unless fc2mp4 does not find Fightcade by itself.
-Settings also has an **Encoder** choice (see `--encoder` below), shows the version of your `fc2mp4.exe`; when a newer release is out, it says so and links
-to the download page.
+Open **fc2mp4** from the Start menu. Paste one or more replay links (one per line) and press
+**Convert**: the links are converted one after the other, the console shows the progress, and
+**Open video** opens the last one. If the window is in the background, Windows tells you when it is
+done. The folders (Fightcade, videos) and the encoder are under **Settings** and are remembered; leave
+*Fightcade folder* empty unless fc2mp4 does not find Fightcade by itself. When a new version is out, a
+bar at the top offers to update.
+
+Coming from the two files `fc2mp4.exe` + `fc2mp4-ui.exe`: run the installer, then delete them; your
+settings are kept.
 
 **From PowerShell:**
 
-Open PowerShell in the folder where you saved `fc2mp4.exe`: in Explorer, right-click an empty spot in
-that folder → *Open in Terminal* (Windows 11), or *Shift + right-click* → *Open PowerShell window here*
-(Windows 10). Then:
+The installer also puts the command-line tool, `fc2mp4-cli.exe`, next to the window (the release page
+offers it on its own too):
 
 ```powershell
-.\fc2mp4.exe "https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234"
+& "$env:LOCALAPPDATA\Programs\fc2mp4\fc2mp4-cli.exe" "https://replay.fightcade.com/fbneo/sfiii3nr1/1700000000000-1234"
 ```
 
-PowerShell needs the `.\` in front of `fc2mp4.exe`, and the link in quotes. The video goes to
-`Videos\Fightcade` in your user folder.
+Keep the `&` and the quotes. The video goes to `Videos\Fightcade` in your user folder.
 
 fc2mp4 looks for Fightcade in `Documents\Fightcade` (also under OneDrive), `%USERPROFILE%\Fightcade`,
 `C:\Fightcade` and `%LOCALAPPDATA%\Programs\Fightcade`. If yours is elsewhere, pass the Fightcade
 folder (the one that contains `emulator\fbneo\fcadefbneo.exe`) with `--fightcade-dir`:
 
 ```powershell
-.\fc2mp4.exe "https://replay.fightcade.com/fbneo/garou/1791766846976-7757" --fightcade-dir "D:\Games\Fightcade"
+& "$env:LOCALAPPDATA\Programs\fc2mp4\fc2mp4-cli.exe" "https://replay.fightcade.com/fbneo/garou/1791766846976-7757" --fightcade-dir "D:\Games\Fightcade"
 ```
 
 To choose where the video goes, add `-o` with a folder or a file name:
 
 ```powershell
-.\fc2mp4.exe "https://replay.fightcade.com/fbneo/sfa3/1792152118748-6544" --fightcade-dir "D:\Games\Fightcade" -o "$HOME\Desktop\alpha3.mp4"
+& "$env:LOCALAPPDATA\Programs\fc2mp4\fc2mp4-cli.exe" "https://replay.fightcade.com/fbneo/sfa3/1792152118748-6544" --fightcade-dir "D:\Games\Fightcade" -o "$HOME\Desktop\alpha3.mp4"
 ```
 
 Keep the quotes around paths that contain spaces, and don't end a path with `\` (`"D:\Games\Fightcade\"`
