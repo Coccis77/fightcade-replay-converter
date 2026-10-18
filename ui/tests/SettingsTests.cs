@@ -10,11 +10,11 @@ namespace Fc2mp4Ui.Tests
         [Fact]
         public void UsesTheDefaultsWithoutAFile()
         {
-            var s = Settings.Load(TempFile(), @"C:\Tools\fc2mp4.exe", @"C:\Videos\Fightcade");
-            Assert.Equal(@"C:\Tools\fc2mp4.exe", s.Exe);
+            var s = Settings.Load(TempFile(), @"C:\Videos\Fightcade");
             Assert.Equal("", s.FightcadeFolder);
             Assert.Equal(@"C:\Videos\Fightcade", s.OutputFolder);
             Assert.Equal("auto", s.Encoder);
+            Assert.Equal("", s.LastVersion);
         }
 
         [Fact]
@@ -23,29 +23,28 @@ namespace Fc2mp4Ui.Tests
             string path = TempFile();
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, "encoder=divx\n");
-            Assert.Equal("auto", Settings.Load(path, "e", "o").Encoder);
+            Assert.Equal("auto", Settings.Load(path, "o").Encoder);
         }
 
         [Fact]
         public void SavesAndLoadsBack_CreatingTheFolder_EvenWithEqualsSignsInPaths()
         {
             string path = TempFile();
-            new Settings { Exe = @"C:\a=b\fc2mp4.exe", FightcadeFolder = @"D:\Fight cade", OutputFolder = @"E:\Out", Encoder = "qsv" }.Save(path);
-            var s = Settings.Load(path, "x", "y");
-            Assert.Equal("qsv", s.Encoder);
-            Assert.Equal(@"C:\a=b\fc2mp4.exe", s.Exe);
+            new Settings { FightcadeFolder = @"D:\Fight cade", OutputFolder = @"C:\a=b\Out", Encoder = "qsv", LastVersion = "0.18.0" }.Save(path);
+            var s = Settings.Load(path, "y");
             Assert.Equal(@"D:\Fight cade", s.FightcadeFolder);
-            Assert.Equal(@"E:\Out", s.OutputFolder);
+            Assert.Equal(@"C:\a=b\Out", s.OutputFolder);
+            Assert.Equal("qsv", s.Encoder);
+            Assert.Equal("0.18.0", s.LastVersion);
         }
 
         [Fact]
-        public void EmptyExeOrOutputFallBackToTheDefaults_EmptyFightcadeStaysEmpty()
+        public void EmptyOutputFallsBackToTheDefault_EmptyFightcadeStaysEmpty()
         {
             string path = TempFile();
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllText(path, "exe=\nfightcade=\noutput=\nunknown=1\ngarbage line\n");
-            var s = Settings.Load(path, "defExe", "defOut");
-            Assert.Equal("defExe", s.Exe);
+            File.WriteAllText(path, "fightcade=\noutput=\nunknown=1\ngarbage line\n");
+            var s = Settings.Load(path, "defOut");
             Assert.Equal("", s.FightcadeFolder);
             Assert.Equal("defOut", s.OutputFolder);
         }
@@ -55,8 +54,20 @@ namespace Fc2mp4Ui.Tests
         {
             string dir = Path.Combine(Path.GetTempPath(), "fc2mp4-ui-" + Path.GetRandomFileName());
             Directory.CreateDirectory(dir); // a folder where the file should be
-            var s = Settings.Load(dir, "defExe", "defOut");
-            Assert.Equal("defExe", s.Exe);
+            Assert.Equal("defOut", Settings.Load(dir, "defOut").OutputFolder);
+        }
+
+        [Fact]
+        public void ASettingsFileFromTheTwoExeSetupStillLoads()
+        {
+            string path = TempFile();
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, "exe=C:\\Tools\\fc2mp4.exe\nfightcade=D:\\FC\noutput=E:\\Out\nencoder=nvenc\n");
+            var s = Settings.Load(path, "defOut");
+            Assert.Equal(@"D:\FC", s.FightcadeFolder);
+            Assert.Equal(@"E:\Out", s.OutputFolder);
+            Assert.Equal("nvenc", s.Encoder);
+            Assert.Equal("", s.LastVersion);
         }
     }
 }

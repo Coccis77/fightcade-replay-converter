@@ -27,59 +27,11 @@ namespace Fc2mp4Ui.Tests
             Assert.Null(UpdateCheck.ParseLatestTag(json));
         }
 
-        [Fact]
-        public void LabelsTheExeVersion()
-        {
-            Assert.Equal("Version: v0.15.0", UpdateCheck.VersionLabel(V150, null));
-            Assert.Equal("Version: v0.15.0", UpdateCheck.VersionLabel(V150, V150));
-            Assert.Equal("Version: v0.15.0 — v0.16.0 is available", UpdateCheck.VersionLabel(V150, V160));
-            Assert.Equal("Version: unknown", UpdateCheck.VersionLabel(null, V160));
-        }
 
-        [Fact]
-        public void NoNoticeWhenUpToDateOrUnknown()
-        {
-            Assert.Null(UpdateCheck.Notice(V150, V150, V150));
-            Assert.Null(UpdateCheck.Notice(null, V150, V150)); // GitHub not reachable
-            Assert.Null(UpdateCheck.Notice(V150, V160, V150)); // a newer exe than the release: fine
-        }
 
-        [Fact]
-        public void TellsWhichFilesToDownloadAgain()
-        {
-            Assert.Equal("A newer fc2mp4 (v0.16.0) is available: download fc2mp4.exe with the link in Settings",
-                UpdateCheck.Notice(V160, V150, V160));
-            Assert.Equal("A newer fc2mp4 (v0.16.0) is available: download fc2mp4.exe and fc2mp4-ui.exe again with the link in Settings",
-                UpdateCheck.Notice(V160, V150, V150));
-            Assert.Equal("A newer fc2mp4 (v0.16.0) is available: download fc2mp4.exe and fc2mp4-ui.exe again with the link in Settings",
-                UpdateCheck.Notice(V160, V160, V150)); // only the window is old
-        }
 
-        [Fact]
-        public void ALocalWindowBuildOnlyComparesTheExe()
-        {
-            Assert.Null(UpdateCheck.Notice(V160, V160, new Version(0, 0, 0)));
-            Assert.Equal("A newer fc2mp4 (v0.16.0) is available: download fc2mp4.exe with the link in Settings",
-                UpdateCheck.Notice(V160, V150, new Version(0, 0, 0)));
-        }
 
-        [Fact]
-        public void HidesTheDownloadLinkWhenEverythingIsUpToDate()
-        {
-            Assert.False(UpdateCheck.ShowDownloadLink(V150, V150, V150, exeUsable: true));
-            Assert.False(UpdateCheck.ShowDownloadLink(V150, V160, V150, exeUsable: true)); // exe newer than the release
-            Assert.False(UpdateCheck.ShowDownloadLink(null, V150, V150, exeUsable: true)); // GitHub not reachable, exe fine
-        }
 
-        [Fact]
-        public void ShowsTheDownloadLinkWhenSomethingIsNewerOrMissing()
-        {
-            Assert.True(UpdateCheck.ShowDownloadLink(V160, V150, V160, exeUsable: true)); // newer fc2mp4.exe
-            Assert.True(UpdateCheck.ShowDownloadLink(V160, V160, V150, exeUsable: true)); // newer window
-            Assert.True(UpdateCheck.ShowDownloadLink(null, null, V150, exeUsable: false)); // no exe chosen
-            Assert.True(UpdateCheck.ShowDownloadLink(null, null, V150, exeUsable: true)); // version unreadable
-            Assert.True(UpdateCheck.ShowDownloadLink(null, new Version(0, 14, 0), V150, exeUsable: false)); // too old for the window
-        }
 
         [Fact]
         public void ParsesVersionsLikeFc2mp4PrintsThem()

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Fc2mp4Ui
 {
-    // The latest fc2mp4 release on GitHub, compared with the chosen fc2mp4.exe and with this window.
+    // The latest fc2mp4 release on GitHub.
     public static class UpdateCheck
     {
         public const string ReleasesUrl = "https://github.com/Coccis77/fightcade-replay-converter/releases/latest";
@@ -17,34 +17,6 @@ namespace Fc2mp4Ui
         {
             Match m = TagName.Match(json ?? "");
             return m.Success ? VersionCheck.Parse(m.Groups[1].Value) : null;
-        }
-
-        public static string VersionLabel(Version exe, Version latest)
-        {
-            if (exe == null) return "Version: unknown";
-            string label = "Version: v" + exe;
-            if (latest != null && latest > exe) label += " — v" + latest + " is available";
-            return label;
-        }
-
-        // The download link is only shown when it helps: no usable fc2mp4.exe yet (none chosen, version
-        // unreadable, too old for this window), or a newer release on GitHub.
-        public static bool ShowDownloadLink(Version latest, Version exe, Version window, bool exeUsable)
-        {
-            if (!exeUsable || exe == null) return true;
-            return Notice(latest, exe, window) != null;
-        }
-
-        // Null when there is nothing newer (or GitHub could not be reached).
-        public static string Notice(Version latest, Version exe, Version window)
-        {
-            if (latest == null) return null;
-            bool localWindow = window == null || new Version(window.Major, window.Minor, Math.Max(window.Build, 0)) == new Version(0, 0, 0);
-            bool windowOld = !localWindow && latest > new Version(window.Major, window.Minor, Math.Max(window.Build, 0));
-            bool exeOld = exe != null && latest > exe;
-            if (windowOld) return "A newer fc2mp4 (v" + latest + ") is available: download fc2mp4.exe and fc2mp4-ui.exe again with the link in Settings";
-            if (exeOld) return "A newer fc2mp4 (v" + latest + ") is available: download fc2mp4.exe with the link in Settings";
-            return null;
         }
     }
 }
