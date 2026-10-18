@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { audioInputRate, ENCODERS, encoderArgs, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
+import { audioInputRate, ENCODERS, encoderArgs, ffmpegFailureReason, mux, muxArgs, parseInfo, parseProgressFrames, partPath, runFfmpeg, validateFormat, videoEncodeArgs } from '../src/ffmpeg.js';
 import { ExitCode } from '../src/errors.js';
 import { pathExists } from '../src/fsUtil.js';
 
@@ -44,6 +44,24 @@ describe('ffmpeg arguments', () => {
     expect(encoderArgs(encoder)).toEqual(expected);
     const args = videoEncodeArgs({ input: 'i', output: 'o', scale: 'sharp', format: SF3, encoder });
     expect(args.slice(args.indexOf('-c:v'), args.indexOf('-an'))).toEqual(expected);
+  });
+
+  it("gives ffmpeg's actual reason, not its closing 'Conversion failed!'", () => {
+    const stderr = [
+      'Input #0, rawvideo, from pipe:0:',
+      '[h264_qsv @ 0x1] Error creating a MFX session: -9.',
+      '[vost#0:0/h264_qsv @ 0x2] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.',
+      'Conversion failed!',
+    ];
+    expect(ffmpegFailureReason(stderr)).toBe('[h264_qsv @ 0x1] Error creating a MFX session: -9.');
+    expect(ffmpegFailureReason(['Unknown encoder \'h264_nvenc\'', 'Conversion failed!'])).toBe("Unknown encoder 'h264_nvenc'");
+    expect(ffmpegFailureReason(['something odd'])).toBe('something odd');
+    expect(ffmpegFailureReason([])).toBe('');
+  });
+
+  it('takes an NVENC quality from FC2MP4_NVENC_CQ (temporary, for testing sizes)', () => {
+    expect(encoderArgs('nvenc', { FC2MP4_NVENC_CQ: '26' })).toContain('26');
+    expect(encoderArgs('nvenc', { FC2MP4_NVENC_CQ: 'junk' })[encoderArgs('nvenc', {}).indexOf('-cq') + 1]).toBe('20');
   });
 
   it('lists every encoder, x264 first (the default)', () => {

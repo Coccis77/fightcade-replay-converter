@@ -17,13 +17,17 @@ export const VIDEO_FILTERS: Record<ScaleMode, string> = {
 export const ENCODERS = ['x264', 'nvenc', 'qsv', 'amf', 'mf', 'videotoolbox'] as const;
 export type EncoderName = (typeof ENCODERS)[number];
 
-export function encoderArgs(encoder: EncoderName): string[] {
+export function encoderArgs(encoder: EncoderName, env: Record<string, string | undefined> = process.env): string[] {
   switch (encoder) {
     case 'x264':
       // veryfast/crf 20: no visible loss vs medium/crf 18.
       return ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'];
     case 'nvenc':
-      return ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '20', '-b:v', '0', '-pix_fmt', 'yuv420p'];
+      {
+        // TEMPORARY (testing file sizes on Windows): FC2MP4_NVENC_CQ overrides the quality value.
+        const cq = /^\d{1,2}$/.test(env.FC2MP4_NVENC_CQ ?? '') ? env.FC2MP4_NVENC_CQ! : '20';
+        return ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', cq, '-b:v', '0', '-pix_fmt', 'yuv420p'];
+      }
     case 'qsv':
       return ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '20', '-pix_fmt', 'nv12'];
     case 'amf':
@@ -33,6 +37,12 @@ export function encoderArgs(encoder: EncoderName): string[] {
     case 'videotoolbox':
       return ['-c:v', 'h264_videotoolbox', '-q:v', '65', '-pix_fmt', 'nv12'];
   }
+}
+
+// ffmpeg ends a failure with "Conversion failed!": the useful reason is the first error line before it.
+export function ffmpegFailureReason(stderrLines: readonly string[]): string {
+  const lines = stderrLines.map((l) => l.trim()).filter((l) => l && l !== 'Conversion failed!');
+  return lines.find((l) => /error|unknown encoder|not found|no device|cannot|could not/i.test(l)) ?? lines.at(-1) ?? '';
 }
 
 export function videoEncodeArgs({ input, output, scale, format, encoder = 'x264' }: { input: string; output: string; scale: ScaleMode; format: FrameFormat; encoder?: EncoderName }): string[] {

@@ -6,7 +6,7 @@ import type { Writable } from 'node:stream';
 import { EMULATOR_EXE, TIMEOUTS, type FrameFormat } from './constants.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { run } from './exec.js';
-import { parseInfo, validateFormat, type EncoderName, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
+import { ffmpegFailureReason, parseInfo, validateFormat, type EncoderName, parseProgressFrames, videoEncodeArgs, type ScaleMode } from './ffmpeg.js';
 import type { FightcadeInstall } from './install.js';
 import { pathFor } from './platform.js';
 import { streamArg, type ReplayRef } from './replayRef.js';
@@ -239,10 +239,9 @@ export function defaultCaptureDeps(
     toEmulatorPath: (p) => (install.platform === 'win32' ? p : winPath(p)),
     startEncoder: (args, onFrames, attach) => {
       const child = spawn(ffmpeg, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-      let lastError = '';
+      let stderrTail: string[] = [];
       child.stderr!.on('data', (d) => {
-        const lines = String(d).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        if (lines.length > 0) lastError = lines.at(-1)!;
+        stderrTail = [...stderrTail, ...String(d).split(/\r?\n/)].filter((l) => l.trim()).slice(-30);
       });
       child.stdin!.on('error', () => {}); // ffmpeg exiting early must not crash Node (EPIPE)
       attach(child.stdin!);
@@ -253,7 +252,7 @@ export function defaultCaptureDeps(
       const proc = wrap(child, async () => {
         child.kill('SIGKILL');
       });
-      return Object.assign(proc, { lastError: () => lastError });
+      return Object.assign(proc, { lastError: () => ffmpegFailureReason(stderrTail) });
     },
     startEmulator: (env) => {
       // FBNeo divides by the screen size while sizing its window: a sleeping Mac display (size 0)
