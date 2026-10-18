@@ -68,21 +68,5 @@ namespace Fc2mp4Ui
             }
             catch (Exception) { }
         }
-
-        // "fc2mp4.exe --version", or null when it cannot be run or takes longer than 5 s.
-        public static string ReadVersion(string exe)
-        {
-            try
-            {
-                var psi = new ProcessStartInfo(exe, "--version") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.UTF8 };
-                using (var p = Process.Start(psi))
-                {
-                    var output = p.StandardOutput.ReadToEndAsync();
-                    if (!p.WaitForExit(5_000)) { try { p.Kill(); } catch (Exception) { } return null; }
-                    return output.Result;
-                }
-            }
-            catch (Exception) { return null; }
-        }
     }
 }
