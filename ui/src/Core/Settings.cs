@@ -4,7 +4,8 @@ using System.Text;
 
 namespace Fc2mp4Ui
 {
-    // %APPDATA%\fc2mp4-ui\settings.txt: fightcade=, output=, encoder=, last= (the version that last ran).
+    // %APPDATA%\fc2mp4-ui\settings.txt: fightcade=, output=, encoder=, last= (the version that last ran),
+    // window= (x,y,width,height) and divider= (height of the log above Settings).
     // The link is never saved; exe= (from the two-exe setup) is ignored.
     public sealed class Settings
     {
@@ -12,6 +13,8 @@ namespace Fc2mp4Ui
         public string OutputFolder { get; set; } = "";
         public string Encoder { get; set; } = "auto";
         public string LastVersion { get; set; } = "";
+        public string Window { get; set; } = "";
+        public int Divider { get; set; }
 
         public static Settings Load(string path, string defaultOutput)
         {
@@ -28,14 +31,27 @@ namespace Fc2mp4Ui
                 else if (key == "output" && value.Length > 0) s.OutputFolder = value;
                 else if (key == "encoder") s.Encoder = Encoders.Normalize(value);
                 else if (key == "last") s.LastVersion = value;
+                else if (key == "window") s.Window = value;
+                else if (key == "divider" && int.TryParse(value, out int divider) && divider > 0) s.Divider = divider;
             }
             return s;
+        }
+
+        // x, y, width, height of a saved window, or null when missing or not a usable window.
+        public static int[] ParseWindow(string text)
+        {
+            string[] parts = (text ?? "").Split(',');
+            if (parts.Length != 4) return null;
+            var values = new int[4];
+            for (int i = 0; i < 4; i++)
+                if (!int.TryParse(parts[i].Trim(), out values[i])) return null;
+            return values[2] >= 300 && values[3] >= 300 ? values : null;
         }
 
         public void Save(string path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllText(path, "fightcade=" + FightcadeFolder + "\noutput=" + OutputFolder + "\nencoder=" + Encoder + "\nlast=" + LastVersion + "\n", new UTF8Encoding(false));
+            File.WriteAllText(path, "fightcade=" + FightcadeFolder + "\noutput=" + OutputFolder + "\nencoder=" + Encoder + "\nlast=" + LastVersion + "\nwindow=" + Window + "\ndivider=" + Divider + "\n", new UTF8Encoding(false));
         }
     }
 }

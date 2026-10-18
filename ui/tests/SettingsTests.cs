@@ -58,6 +58,38 @@ namespace Fc2mp4Ui.Tests
         }
 
         [Fact]
+        public void RemembersTheWindowAndTheLogDivider()
+        {
+            string path = TempFile();
+            new Settings { Window = "100,80,900,800", Divider = 420 }.Save(path);
+            var s = Settings.Load(path, "o");
+            Assert.Equal("100,80,900,800", s.Window);
+            Assert.Equal(420, s.Divider);
+        }
+
+        [Fact]
+        public void NoWindowOrDividerYetMeansDefaults()
+        {
+            var s = Settings.Load(TempFile(), "o");
+            Assert.Equal("", s.Window);
+            Assert.Equal(0, s.Divider);
+            string path = TempFile();
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, "divider=lots\n");
+            Assert.Equal(0, Settings.Load(path, "o").Divider);
+        }
+
+        [Fact]
+        public void ReadsASavedWindowPlace()
+        {
+            Assert.Equal(new[] { 100, 80, 900, 800 }, Settings.ParseWindow("100,80,900,800"));
+            Assert.Null(Settings.ParseWindow(""));
+            Assert.Null(Settings.ParseWindow("1,2,3"));
+            Assert.Null(Settings.ParseWindow("a,b,c,d"));
+            Assert.Null(Settings.ParseWindow("0,0,10,10")); // too small to be a real window
+        }
+
+        [Fact]
         public void ASettingsFileFromTheTwoExeSetupStillLoads()
         {
             string path = TempFile();

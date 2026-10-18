@@ -42,6 +42,11 @@ namespace Fc2mp4Ui
         readonly ComboBox encoder = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         readonly Label encoderHelp = new Label { AutoSize = true, MaximumSize = new Size(560, 0), ForeColor = SystemColors.GrayText };
         readonly Label versionLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
+        // Log above, Settings below: drag the divider to give the log more room (remembered).
+        readonly SplitContainer split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 6 };
+        // While connecting, the status counts seconds so a replay that never answers doesn't look frozen.
+        readonly Timer connectTimer = new Timer { Interval = 1000 };
+        DateTime connectingSince;
 
         Settings settings;
         string startNotice;
@@ -60,8 +65,8 @@ namespace Fc2mp4Ui
         public MainForm()
         {
             Text = "fc2mp4";
-            MinimumSize = new Size(640, 520);
-            Size = new Size(760, 640);
+            MinimumSize = new Size(640, 560);
+            Size = new Size(900, 800);
             StartPosition = FormStartPosition.CenterScreen;
             BuildLayout();
 
@@ -77,6 +82,7 @@ namespace Fc2mp4Ui
             startNotice = Updater.UpdatedNotice(settings.LastVersion, windowVersion);
             settings.LastVersion = Updater.VersionText(windowVersion);
             SaveSettings();
+            RestorePlace();
 
             links.TextChanged += (s, e) => UpdateButtons();
             links.KeyDown += (s, e) => { if (e.Control && e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; StartRun(); } };
@@ -91,7 +97,8 @@ namespace Fc2mp4Ui
             runner.StderrLine += line => Post(() => OnStderr(line));
             runner.StdoutLine += line => Post(() => stdout.Add(line));
             runner.Exited += (code, forced) => Post(() => OnExited(code, forced));
-            Shown += (s, e) => { CheckCli(); links.Focus(); _ = CheckForUpdateAsync(); };
+            connectTimer.Tick += (s, e) => ShowConnecting();
+            Shown += (s, e) => { RestoreDivider(); CheckCli(); links.Focus(); _ = CheckForUpdateAsync(); };
             FormClosing += OnClosing;
             FormClosed += (s, e) => notifier.Dispose();
         }
@@ -104,9 +111,7 @@ namespace Fc2mp4Ui
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // links
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // buttons
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // status
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // console
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // open buttons
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // settings
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // log | settings (divider)
 
             updateBar.Controls.Add(updateText);
             updateBar.Controls.Add(updateNow);
@@ -127,14 +132,23 @@ namespace Fc2mp4Ui
             root.Controls.Add(actions);
 
             root.Controls.Add(status);
-            root.Controls.Add(console);
 
+            var logArea = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1 };
+            logArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            logArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            logArea.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            logArea.Controls.Add(console, 0, 0);
             var opens = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, AutoSize = true };
             opens.Controls.Add(openFolder);
             opens.Controls.Add(openVideo);
-            root.Controls.Add(opens);
+            logArea.Controls.Add(opens, 0, 1);
+            split.Panel1.Controls.Add(logArea);
+            split.Panel1MinSize = 120;
+            split.Panel2.AutoScroll = true; // Settings scroll when the divider is pulled down
+            split.Panel2MinSize = 60;
+            root.Controls.Add(split);
 
-            var group = new GroupBox { Text = "Settings", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8) };
+            var group = new GroupBox { Text = "Settings", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8) };
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, AutoSize = true };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -152,7 +166,7 @@ namespace Fc2mp4Ui
             grid.Controls.Add(help, 0, 5);
             grid.SetColumnSpan(help, 3);
             group.Controls.Add(grid);
-            root.Controls.Add(group);
+            split.Panel2.Controls.Add(group);
 
             Controls.Add(root);
         }
@@ -165,6 +179,36 @@ namespace Fc2mp4Ui
             button.Click += (s, e) => browse();
             browseButtons.Add(button);
             grid.Controls.Add(button, 2, row);
+        }
+
+        // ---- Window place and log divider, remembered between uses ----
+
+        void RestorePlace()
+        {
+            int[] place = Settings.ParseWindow(settings.Window);
+            if (place == null) return;
+            var bounds = new Rectangle(place[0], place[1], place[2], place[3]);
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                if (!screen.WorkingArea.IntersectsWith(bounds)) continue;
+                StartPosition = FormStartPosition.Manual;
+                Bounds = bounds;
+                return;
+            }
+        }
+
+        void RestoreDivider()
+        {
+            int wanted = settings.Divider > 0 ? settings.Divider : split.Height * 2 / 3;
+            int max = split.Height - split.Panel2MinSize - split.SplitterWidth;
+            if (max > split.Panel1MinSize) split.SplitterDistance = Math.Max(split.Panel1MinSize, Math.Min(wanted, max));
+        }
+
+        void SavePlace()
+        {
+            Rectangle bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            settings.Window = bounds.X + "," + bounds.Y + "," + bounds.Width + "," + bounds.Height;
+            settings.Divider = split.SplitterDistance;
         }
 
         void BrowseFolder(TextBox box, string description)
@@ -257,8 +301,21 @@ namespace Fc2mp4Ui
             }
         }
 
+        void ShowConnecting()
+        {
+            if (!state.ShowsProgress) { connectTimer.Stop(); return; }
+            int seconds = (int)(DateTime.Now - connectingSince).TotalSeconds;
+            status.Text = batch.Progress("Connecting to the replay stream… " + seconds + " s");
+        }
+
         void OnStderr(string line)
         {
+            if (line.StartsWith("Connecting to the replay stream", StringComparison.Ordinal))
+            {
+                connectingSince = DateTime.Now;
+                connectTimer.Start();
+            }
+            else connectTimer.Stop();
             stderr.Add(line);
             log.Add(line);
             console.Text = consoleBefore + log.Text;
@@ -269,6 +326,7 @@ namespace Fc2mp4Ui
 
         void OnExited(int code, bool forced)
         {
+            connectTimer.Stop();
             var outcome = RunOutcome.From(code, forced, stdout, stderr);
             consoleBefore = console.Text;
             if (batch.Count > 1) consoleBefore += Environment.NewLine + outcome.Message;
@@ -301,7 +359,7 @@ namespace Fc2mp4Ui
         async void OnClosing(object sender, FormClosingEventArgs e)
         {
             CloseAction action = state.CloseRequested();
-            if (action == CloseAction.CloseNow) { SaveSettings(); return; }
+            if (action == CloseAction.CloseNow) { SavePlace(); SaveSettings(); return; }
             e.Cancel = true;
             if (action == CloseAction.Wait) return;
             if (MessageBox.Show(this, "Stop the conversion?", "fc2mp4", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;

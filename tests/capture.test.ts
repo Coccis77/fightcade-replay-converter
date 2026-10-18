@@ -98,7 +98,7 @@ describe('capture', () => {
   it('fails within firstFrameMs when the stream never starts, killing both processes', async () => {
     const { deps, log, time } = harness({});
     await expect(capture(deps, base)).rejects.toMatchObject({ exitCode: ExitCode.Recording });
-    expect(time()).toBe(60_000);
+    expect(time()).toBe(20_000); // a replay that doesn't exist never answers: give up after 20 s
     expect(log).toContain('kill:emulator');
     expect(log.some((l) => l.startsWith('encoder:'))).toBe(false); // ffmpeg is never started
   });
@@ -232,8 +232,8 @@ describe('capture', () => {
     const { deps } = harness({});
     await expect(capture(deps, base)).rejects.toMatchObject({
       exitCode: ExitCode.Recording,
-      message: 'The replay stream never started',
-      hint: 'Check the link (a quark ID alone means a 3rd Strike replay) and that Fightcade replay servers are reachable',
+      message: "This replay didn't start: the link may be wrong, or Fightcade's replay server didn't answer",
+      hint: 'Check the link (a quark ID alone means a 3rd Strike replay)',
     });
   });
 

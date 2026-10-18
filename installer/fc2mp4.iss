@@ -44,7 +44,10 @@ Name: "{autodesktop}\fc2mp4"; Filename: "{app}\fc2mp4.exe"; Tasks: desktopicon
 
 [Run]
 ; Also after a silent install, so "Update now" reopens the window. /nolaunch=1 (CI) skips it.
-Filename: "{app}\fc2mp4.exe"; Description: "Launch fc2mp4"; Flags: nowait postinstall; Check: ShouldLaunch
+; Through Explorer, as if from the Start menu: a window started directly by Setup inherits something
+; from it that makes the emulator exit at once ("The emulator exited before the replay started",
+; seen on Windows 2026-10-18); a restart from the Start menu fixed it.
+Filename: "{win}\explorer.exe"; Parameters: """{app}\fc2mp4.exe"""; Description: "Launch fc2mp4"; Flags: nowait postinstall; Check: ShouldLaunch
 
 [Code]
 function ShouldLaunch: Boolean;

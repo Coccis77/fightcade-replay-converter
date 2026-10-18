@@ -16,7 +16,9 @@ export const STREAM_PORT = 7100;
 export const EMULATOR_EXE = 'fcadefbneo-fc2mp4.exe';
 
 export const TIMEOUTS = {
-  firstFrameMs: 60_000,
+  // A replay that doesn't exist gets no answer at all from Fightcade's server (no event, 2026-10-18);
+  // real replays start within about 4 s, so 20 s leaves a wide margin.
+  firstFrameMs: 20_000,
   // The stream never signals its end; the emulator exits after this long without input. Fightcade's
   // server sends the inputs ahead: the longest pause measured between frames over 5 replays (≈59000
   // frames, 2026-10-17) was 41 ms, so 3 s keeps a wide margin while saving 12 s per conversion.
