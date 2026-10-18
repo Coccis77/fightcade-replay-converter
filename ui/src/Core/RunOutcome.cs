@@ -26,6 +26,9 @@ namespace Fc2mp4Ui
             return new RunOutcome { Kind = OutcomeKind.Failed, Message = "Failed: " + FailureText(exitCode, stderr) };
         }
 
+        // fc2mp4-cli.exe could not even be started for this link.
+        public static RunOutcome Failure(string message) => new RunOutcome { Kind = OutcomeKind.Failed, Message = "Failed: " + message };
+
         static string FailureText(int exitCode, IReadOnlyList<string> stderr)
         {
             int lastError = LastIndex(stderr, "Error: ");
