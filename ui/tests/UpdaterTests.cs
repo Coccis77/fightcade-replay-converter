@@ -39,10 +39,10 @@ namespace Fc2mp4Ui.Tests
         {
             byte[] mz = { (byte)'M', (byte)'Z' };
             Assert.Null(Updater.CheckDownload(mz, 1000, 1000));
-            Assert.Null(Updater.CheckDownload(mz, 1000, -1)); // length not announced
+            Assert.Equal("The update couldn't be downloaded completely", Updater.CheckDownload(mz, 1000, -1)); // size unknown: not trusted
             Assert.Equal("The update couldn't be downloaded completely", Updater.CheckDownload(mz, 999, 1000));
             Assert.Equal("The update download isn't a Windows program", Updater.CheckDownload(new[] { (byte)'<', (byte)'!' }, 1000, 1000));
-            Assert.Equal("The update download isn't a Windows program", Updater.CheckDownload(new byte[0], 0, -1));
+            Assert.Equal("The update download isn't a Windows program", Updater.CheckDownload(new byte[0], 0, 0));
         }
 
         [Fact]
@@ -54,6 +54,16 @@ namespace Fc2mp4Ui.Tests
             Assert.Null(Updater.UpdatedNotice("garbage", Running));
             Assert.Equal("0.18.0", Updater.VersionText(Running));
             Assert.Equal("Version: v0.18.0", Updater.VersionLabel(Running));
+        }
+
+        [Fact]
+        public void RecognisesItsOwnDownloadedInstallersForCleanup()
+        {
+            Assert.True(Updater.IsDownloadedSetup("fc2mp4-setup-v0.18.0.exe"));
+            Assert.True(Updater.IsDownloadedSetup("FC2MP4-SETUP-V1.2.3.EXE"));
+            Assert.False(Updater.IsDownloadedSetup("fc2mp4-setup.exe"));
+            Assert.False(Updater.IsDownloadedSetup("other-setup-v1.0.0.exe"));
+            Assert.False(Updater.IsDownloadedSetup("fc2mp4-setup-v0.18.0.exe.txt"));
         }
     }
 }

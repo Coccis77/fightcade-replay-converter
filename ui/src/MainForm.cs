@@ -53,6 +53,7 @@ namespace Fc2mp4Ui
         bool cliPresent;
         Batch batch;
         string consoleBefore = "";
+        int lastLineStart; // where the console's last line starts, to replace a progress line in place
         OutputLog log = new OutputLog();
         List<string> stdout = new List<string>();
         List<string> stderr = new List<string>();
@@ -83,6 +84,7 @@ namespace Fc2mp4Ui
             settings.LastVersion = Updater.VersionText(windowVersion);
             SaveSettings();
             RestorePlace();
+            DeleteDownloadedSetups();
 
             links.TextChanged += (s, e) => UpdateButtons();
             links.KeyDown += (s, e) => { if (e.Control && e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; StartRun(); } };
@@ -93,7 +95,8 @@ namespace Fc2mp4Ui
             updateNow.Click += (s, e) => UpdateNow();
             updateLater.Click += (s, e) => { updateDismissed = true; ShowUpdateBar(); };
             updateGitHub.Click += (s, e) => Run(new ProcessStartInfo(UpdateCheck.ReleasesUrl) { UseShellExecute = true });
-            notifier.BalloonTipClicked += (s, e) => { if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal; Activate(); };
+            notifier.BalloonTipClicked += (s, e) => { notifier.Visible = false; if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal; Activate(); };
+            notifier.BalloonTipClosed += (s, e) => notifier.Visible = false; // no icon left in the tray
             runner.StderrLine += line => Post(() => OnStderr(line));
             runner.StdoutLine += line => Post(() => stdout.Add(line));
             runner.Exited += (code, forced) => Post(() => OnExited(code, forced));
@@ -317,10 +320,21 @@ namespace Fc2mp4Ui
             }
             else connectTimer.Stop();
             stderr.Add(line);
-            log.Add(line);
-            console.Text = consoleBefore + log.Text;
-            console.SelectionStart = console.TextLength;
-            console.ScrollToCaret();
+            // Append, or replace the last line in place: redrawing the whole console on every progress line
+            // got slow over long batches.
+            switch (log.Add(line))
+            {
+                case LogChange.Added:
+                    string separator = console.TextLength > 0 ? Environment.NewLine : "";
+                    lastLineStart = console.TextLength + separator.Length;
+                    console.AppendText(separator + line);
+                    break;
+                case LogChange.Replaced:
+                    console.Select(lastLineStart, console.TextLength - lastLineStart);
+                    console.SelectedText = line;
+                    console.ScrollToCaret();
+                    break;
+            }
             if (state.ShowsProgress && log.Progress != null && line == log.Progress) status.Text = batch.Progress(line);
         }
 
@@ -404,6 +418,18 @@ namespace Fc2mp4Ui
             Post(() => { latestVersion = latest; ShowUpdateBar(); });
         }
 
+        // Installers downloaded by earlier updates (the one that ran was still in use when the window closed).
+        static void DeleteDownloadedSetups()
+        {
+            try
+            {
+                foreach (string file in Directory.GetFiles(Path.GetTempPath(), "fc2mp4-setup-v*.exe"))
+                    if (Updater.IsDownloadedSetup(Path.GetFileName(file)))
+                        try { File.Delete(file); } catch (Exception) { }
+            }
+            catch (Exception) { }
+        }
+
         static Version FetchLatestVersion()
         {
             try
@@ -453,6 +479,7 @@ namespace Fc2mp4Ui
                 }
                 catch (Exception e) { error = "The update couldn't be started: " + e.Message; }
             }
+            try { File.Delete(setup); } catch (Exception) { } // a rejected download is never kept
             updating = false;
             updateError = error;
             UpdateButtons();

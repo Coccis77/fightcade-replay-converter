@@ -44,5 +44,16 @@ namespace Fc2mp4Ui.Tests
             log.Add("b");
             Assert.Equal("a" + System.Environment.NewLine + "b", log.Text);
         }
+
+        [Fact]
+        public void SaysWhetherALineWasAddedReplacedOrIgnored()
+        {
+            var log = new OutputLog();
+            Assert.Equal(LogChange.Added, log.Add("Connecting to the replay stream…"));
+            Assert.Equal(LogChange.Added, log.Add("Capturing… 1s of replay"));
+            Assert.Equal(LogChange.Replaced, log.Add("Capturing… 2s of replay"));
+            Assert.Equal(LogChange.Ignored, log.Add("  "));
+            Assert.Equal(LogChange.Added, log.Add("Finalizing the MP4…"));
+        }
     }
 }

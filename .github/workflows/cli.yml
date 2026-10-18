@@ -83,7 +83,7 @@ jobs:
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { choco install innosetup --version 6.7.1 -y --no-progress } # pinned: the path above is Inno Setup 6's
           $version = node -p "require('./package.json').version"
           & $iscc "/DAppVersion=$version" installer\fc2mp4.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -95,13 +95,16 @@ jobs:
           $silent = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/nolaunch=1'
           Start-Process build\fc2mp4-setup.exe -ArgumentList $silent -Wait
           if (-not (Test-Path "$app\fc2mp4.exe") -or -not (Test-Path "$app\fc2mp4-cli.exe")) { throw 'files missing after install' }
+          $shortcut = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\fc2mp4.lnk"
+          if (-not (Test-Path $shortcut)) { throw 'no Start-menu shortcut after install' }
           $printed = (& "$app\fc2mp4-cli.exe" --version | Out-String).Trim()
           if ($printed -ne $version) { throw "fc2mp4-cli.exe --version printed '$printed', expected $version" }
           Start-Process build\fc2mp4-setup.exe -ArgumentList $silent -Wait
           if (-not (Test-Path "$app\fc2mp4-cli.exe")) { throw 'files missing after update' }
           Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait
           Start-Sleep -Seconds 5
-          if (Test-Path "$app\fc2mp4-cli.exe") { throw 'still installed after uninstall' }
+          if (Test-Path $app) { throw 'program folder still there after uninstall' }
+          if (Test-Path $shortcut) { throw 'Start-menu shortcut still there after uninstall' }
       - uses: actions/upload-artifact@v4
         with:
           name: fc2mp4-setup.exe

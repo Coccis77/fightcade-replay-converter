@@ -22,11 +22,18 @@ namespace Fc2mp4Ui
         // Null when the file can be run: complete (when the server announced a length) and a Windows program.
         public static string CheckDownload(byte[] head, long length, long expected)
         {
-            if (expected > 0 && length != expected) return "The update couldn't be downloaded completely";
             if (head == null || head.Length < 2 || length < 2 || head[0] != (byte)'M' || head[1] != (byte)'Z') return "The update download isn't a Windows program";
+            // The size must be known: without it a cut download could not be told from a whole one.
+            if (expected <= 0 || length != expected) return "The update couldn't be downloaded completely";
             return null;
         }
 
+        // Downloaded installers, deleted at the next start (the one that just ran was still in use).
+        public static bool IsDownloadedSetup(string fileName) =>
+            System.Text.RegularExpressions.Regex.IsMatch(fileName ?? "", @"^fc2mp4-setup-v\d+\.\d+\.\d+\.exe$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Pre-releases (1.0.0-rc1) are compared as their release: a Windows program version cannot carry the
+        // suffix. fc2mp4 does not publish pre-releases.
         // "Updated to vX" once: the settings remember the last version that ran.
         public static string UpdatedNotice(string lastRun, Version running)
         {
