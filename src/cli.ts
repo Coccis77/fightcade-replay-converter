@@ -2,9 +2,6 @@
 import { formatReplayLength, parseCli, prepareMessage, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
-import { homedir } from 'node:os';
-import { appPaths, supportedPlatform } from './platform.js';
-import { dataFilePath, resetAdmin, serve } from './server/serve.js';
 import { installSignalHandlers, stopOnStdinClose } from './signals.js';
 
 declare const __FC2MP4_VERSION__: string | undefined;
@@ -44,16 +41,6 @@ async function main(): Promise<number> {
       return 0;
     }
     const debug = request.verbose ? (msg: string) => process.stderr.write(`[debug] ${msg}\n`) : undefined;
-    if (request.command === 'reset-admin') {
-      const file = dataFilePath(appPaths(supportedPlatform(process.platform), homedir(), process.env).outputDir);
-      const removed = await resetAdmin(file);
-      process.stdout.write(removed ? 'Admin account removed: open /admin to create it again.\n' : 'There is no admin account yet: open /admin to create it.\n');
-      return 0;
-    }
-    if (request.command === 'serve') {
-      await serve({ port: request.port, host: request.host, fightcadeDir: request.fightcadeDir, keepMs: request.keepMs, trustProxy: process.env.FC2MP4_TRUST_PROXY === '1', signal: controller.signal, log: (msg) => process.stderr.write(`${msg}\n`) });
-      return controller.signal.aborted ? ExitCode.Interrupted : 0;
-    }
     if (request.command === 'prepare') {
       const result = await prepare({ signal: controller.signal, log, debug, onProgress: (e) => process.stderr.write(`${progressLine(e)}\n`) });
       const message = prepareMessage(result);

@@ -68,9 +68,9 @@ export interface ConvertDeps {
   removeDir(dir: string): Promise<void>;
 }
 
-// The command line has -o; serve does not. The Docker advice only makes sense inside the image.
-export function notWritableHint(forServe: boolean, inDocker: boolean): string {
-  const base = forServe ? 'Make it writable, or set FC2MP4_OUTPUT_DIR to another folder' : 'Choose another folder with -o, or make this one writable';
+// The Docker advice only makes sense inside the image.
+export function notWritableHint(inDocker: boolean): string {
+  const base = 'Choose another folder with -o, or make this one writable';
   return inDocker ? `${base} (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)` : base;
 }
 
@@ -90,7 +90,7 @@ export function defaultDeps(): ConvertDeps {
         await mkdir(dir, { recursive: true });
         await access(dir, constants.W_OK);
       } catch {
-        throw new ConvertError(ExitCode.Preflight, `Cannot write to ${dir}`, notWritableHint(false, Boolean(process.env.FC2MP4_DOCKER)));
+        throw new ConvertError(ExitCode.Preflight, `Cannot write to ${dir}`, notWritableHint(Boolean(process.env.FC2MP4_DOCKER)));
       }
     },
     locateFfmpeg: (_install, signal) => locateFfmpeg(platform, app.ffmpegDir, defaultFfmpegDeps(platform, signal)),

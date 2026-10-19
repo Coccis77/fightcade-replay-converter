@@ -328,10 +328,8 @@ describe('prepare without a forced update (serve startup)', () => {
 
 describe('notWritableHint', () => {
   it('mentions -o only for the CLI, and Docker only inside Docker', () => {
-    expect(notWritableHint(false, false)).toBe('Choose another folder with -o, or make this one writable');
-    expect(notWritableHint(false, true)).toBe('Choose another folder with -o, or make this one writable (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)');
-    expect(notWritableHint(true, false)).toBe('Make it writable, or set FC2MP4_OUTPUT_DIR to another folder');
-    expect(notWritableHint(true, true)).toBe('Make it writable, or set FC2MP4_OUTPUT_DIR to another folder (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)');
+    expect(notWritableHint(false)).toBe('Choose another folder with -o, or make this one writable');
+    expect(notWritableHint(true)).toBe('Choose another folder with -o, or make this one writable (in Docker: create the folder before mounting it, or run sudo chown 1000:1000 on it)');
   });
 });
 

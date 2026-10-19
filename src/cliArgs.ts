@@ -7,8 +7,6 @@ export const USAGE = `Usage: fc2mp4 <replay-link-or-quarkId> [options]
        fc2mp4 update-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 rebuild-emulator [--fightcade-dir <p>] [-v]
        fc2mp4 prepare [-v]
-       fc2mp4 serve [--port <n>] [--host <addr>] [--keep <d>] [--fightcade-dir <p>] [-v]
-       fc2mp4 reset-admin
 
 Records a Fightcade FBNeo replay to MP4 (macOS, Windows and Linux).
 Pass the replay link; a quark ID alone means 3rd Strike. Vertical games are not supported yet.
@@ -28,18 +26,13 @@ Pass the replay link; a quark ID alone means 3rd Strike. Vertical games are not 
 
 update-emulator checks GitHub for a newer emulator build now (otherwise once a day).
 rebuild-emulator builds the emulator locally (macOS, from a source checkout; needs mingw-w64).
-prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).
-serve starts a small web page to convert replays from a browser (default http://localhost:8080; --host 0.0.0.0 or FC2MP4_HOST lets other devices in;
---keep 7d deletes its MP4s older than 7 days from the output folder, checked every hour).
-reset-admin removes the web page's admin account (the output folder's fc2mp4-data.json): /admin then offers to create it again.`;
+prepare downloads the emulator and sets up Wine ahead of time (no Fightcade files needed; used by the Docker image).`;
 
 export type CliRequest =
   | { command: 'help' }
   | { command: 'convert'; input: string; output?: string; scale: ScaleMode; maxDurationMs: number; fightcadeDir?: string; stopOnStdinClose: boolean; encoder: EncoderChoice; verbose: boolean }
   | { command: 'update-emulator' | 'rebuild-emulator'; fightcadeDir?: string; verbose: boolean }
-  | { command: 'prepare'; verbose: boolean }
-  | { command: 'reset-admin'; verbose: boolean }
-  | { command: 'serve'; port: number; host: string; fightcadeDir?: string; keepMs?: number; verbose: boolean };
+  | { command: 'prepare'; verbose: boolean };
 
 export function prepareMessage(result: { emulatorUpdated: boolean; warning?: string }): string | null {
   if (result.warning) return null; // the warning was printed; the exit code says it failed
@@ -78,9 +71,6 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
         'max-duration': { type: 'string' },
         'fightcade-dir': { type: 'string' },
         'stop-on-stdin-close': { type: 'boolean' },
-        port: { type: 'string' },
-        host: { type: 'string' },
-        keep: { type: 'string' },
         verbose: { type: 'boolean', short: 'v' },
         help: { type: 'boolean', short: 'h' },
       },
@@ -93,32 +83,13 @@ export function parseCli(argv: string[], env: Record<string, string | undefined>
   const verbose = values.verbose ?? false;
 
   const command = positionals[0];
-  const nonConvert = ['reset-admin', 'prepare', 'serve', 'update-emulator', 'rebuild-emulator'];
+  const nonConvert = ['prepare', 'update-emulator', 'rebuild-emulator'];
   if (values['stop-on-stdin-close'] && command !== undefined && nonConvert.includes(command)) {
     throw usage('--stop-on-stdin-close only works when converting a replay');
-  }
-  if (command === 'reset-admin') {
-    if (positionals.length !== 1) throw usage('reset-admin takes no arguments');
-    return { command, verbose };
   }
   if (command === 'prepare') {
     if (positionals.length !== 1) throw usage('prepare takes no arguments');
     return { command, verbose };
-  }
-  if (command === 'serve') {
-    if (positionals.length !== 1) throw usage('serve takes no arguments');
-    const port = values.port === undefined ? 8080 : Number(values.port);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw usage(`Invalid --port "${values.port}"`);
-    let keepMs: number | undefined;
-    if (values.keep !== undefined) {
-      // A unit is required: a bare "7" would mean 7 minutes and delete far too early.
-      if (!/[smhd]$/.test(values.keep.trim())) throw new ConvertError(ExitCode.Usage, `Invalid --keep "${values.keep}"`, 'Give a unit, e.g. 7d or 12h');
-      keepMs = parseDuration(values.keep);
-    }
-    return { command, port, host: values.host || env.FC2MP4_HOST || '127.0.0.1', fightcadeDir: values['fightcade-dir'], keepMs, verbose };
-  }
-  for (const option of ['port', 'host', 'keep'] as const) {
-    if (values[option] !== undefined) throw usage(`--${option} only works with fc2mp4 serve`);
   }
   if (command === 'update-emulator' || command === 'rebuild-emulator') {
     if (positionals.length !== 1) throw usage(`${command} takes no arguments`);

@@ -63,7 +63,7 @@ describe('parseCli', () => {
   });
   it('reads --stop-on-stdin-close for a conversion only', () => {
     expect(parseCli(['1-2', '--stop-on-stdin-close'])).toMatchObject({ command: 'convert', stopOnStdinClose: true });
-    expect(usageError(['serve', '--stop-on-stdin-close'])).toMatchObject({ exitCode: ExitCode.Usage, message: '--stop-on-stdin-close only works when converting a replay' });
+    expect(usageError(['update-emulator', '--stop-on-stdin-close'])).toMatchObject({ exitCode: ExitCode.Usage, message: '--stop-on-stdin-close only works when converting a replay' });
     expect(usageError(['prepare', '--stop-on-stdin-close'])).toMatchObject({ exitCode: ExitCode.Usage });
   });
   it('documents --stop-on-stdin-close', () => {
@@ -73,27 +73,18 @@ describe('parseCli', () => {
     expect(parseCli(['update-emulator'])).toEqual({ command: 'update-emulator', fightcadeDir: undefined, verbose: false });
     expect(parseCli(['rebuild-emulator', '--fightcade-dir', '/F'])).toEqual({ command: 'rebuild-emulator', fightcadeDir: '/F', verbose: false });
   });
-  it('parses reset-admin', () => {
-    expect(parseCli(['reset-admin'], {})).toEqual({ command: 'reset-admin', verbose: false });
-  });
   it('parses prepare', () => {
     expect(parseCli(['prepare'])).toEqual({ command: 'prepare', verbose: false });
     expect(parseCli(['prepare', '-v'])).toEqual({ command: 'prepare', verbose: true });
   });
-  it('parses serve, with FC2MP4_HOST as the default host', () => {
-    expect(parseCli(['serve'], {})).toEqual({ command: 'serve', port: 8080, host: '127.0.0.1', fightcadeDir: undefined, keepMs: undefined, verbose: false });
-    expect(parseCli(['serve', '--port', '9000', '--host', '0.0.0.0', '--fightcade-dir', '/F', '-v'], {})).toEqual({
-      command: 'serve', port: 9000, host: '0.0.0.0', fightcadeDir: '/F', keepMs: undefined, verbose: true,
-    });
-    expect(parseCli(['serve'], { FC2MP4_HOST: '0.0.0.0' })).toMatchObject({ host: '0.0.0.0' });
-    expect(parseCli(['serve'], { FC2MP4_HOST: '' })).toMatchObject({ host: '127.0.0.1' });
-    expect(parseCli(['serve', '--keep', '7d'], {})).toMatchObject({ keepMs: 7 * 24 * 60 * 60_000 });
-    expect(parseCli(['serve', '--keep', '12h'], {})).toMatchObject({ keepMs: 12 * 60 * 60_000 });
+  it('has no web server any more', () => {
+    for (const option of ['--port', '--host', '--keep']) expect(usageError(['1-2', option, '1'])).toMatchObject({ exitCode: ExitCode.Usage });
+    expect(USAGE).not.toMatch(/serve|reset-admin|--port|--host|--keep/);
   });
   it('returns help', () => {
     expect(parseCli(['--help'])).toEqual({ command: 'help' });
   });
-  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']], [['reset-admin', 'x']], [['serve', 'x']], [['serve', '--port', '0']], [['serve', '--port', 'abc']], [['serve', '--keep', '7']], [['serve', '--keep', '0d']], [['serve', '--keep', 'abc']], [['--keep', '7d', '1-2']]])('rejects %j', (argv) => {
+  it.each([[[]], [['a', 'b']], [['--scale', 'blurry', '1-2']], [['--bogus', '1-2']], [['rebuild-emulator', 'x']], [['update-emulator', 'x']], [['prepare', 'x']]])('rejects %j', (argv) => {
     expect(usageError(argv)).toMatchObject({ exitCode: ExitCode.Usage });
   });
 });
