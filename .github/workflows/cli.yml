@@ -147,12 +147,15 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+      - name: fc2mp4-docker for this release (pulls this release's image)
+        run: sed "s/__FC2MP4_VERSION__/${GITHUB_REF_NAME#v}/" scripts/fc2mp4-docker > fc2mp4-docker && chmod +x fc2mp4-docker
       - run: |
           # A pre-release (v1.0.0-rc1) is marked as such, so it never shows as the "Latest" release.
           case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre= ;; esac
-          gh release create "${GITHUB_REF_NAME}" fc2mp4-setup.exe fc2mp4-cli.exe fc2mp4-macos-arm64 fc2mp4-linux-x64 $pre \
+          gh release create "${GITHUB_REF_NAME}" fc2mp4-setup.exe fc2mp4-cli.exe fc2mp4-macos-arm64 fc2mp4-linux-x64 fc2mp4-docker $pre \
             --repo "${GITHUB_REPOSITORY}" --title "fc2mp4 ${GITHUB_REF_NAME}" \
-            --notes "Windows: download fc2mp4-setup.exe and run it (it updates itself afterwards). Command line: fc2mp4-cli.exe. macOS: fc2mp4-macos-arm64. Linux: fc2mp4-linux-x64. Docker: ghcr.io/coccis77/fc2mp4:${GITHUB_REF_NAME#v} (see README). Unsigned: Windows SmartScreen may ask you to confirm (More info → Run anyway)."
+            --notes "Windows: download fc2mp4-setup.exe and run it (it updates itself afterwards). Command line: fc2mp4-cli.exe. macOS: fc2mp4-macos-arm64. Linux: fc2mp4-linux-x64, or fc2mp4-docker (runs the Docker image ghcr.io/coccis77/fc2mp4:${GITHUB_REF_NAME#v} with the same arguments; see README). Unsigned: Windows SmartScreen may ask you to confirm (More info → Run anyway)."

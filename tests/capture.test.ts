@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { capture, emulatorCommand, waitAtMost, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
+import { capture, emulatorCommand, startTimeoutMs, waitAtMost, emulatorSpawnOptions, killCommand, sweepProcessGroup, winPath, type CaptureDeps, type CaptureProcess } from '../src/capture.js';
 import { installLayout } from '../src/install.js';
 import { ExitCode } from '../src/errors.js';
 
@@ -101,6 +101,15 @@ describe('capture', () => {
     expect(time()).toBe(20_000); // a replay that doesn't exist never answers: give up after 20 s
     expect(log).toContain('kill:emulator');
     expect(log.some((l) => l.startsWith('encoder:'))).toBe(false); // ffmpeg is never started
+  });
+
+  it('waits longer for the first frame when FC2MP4_START_TIMEOUT_S says so (emulated Docker)', async () => {
+    const { deps, time } = harness({});
+    await expect(capture(deps, { ...base, startTimeoutMs: 90_000 })).rejects.toMatchObject({ exitCode: ExitCode.Recording });
+    expect(time()).toBe(90_000);
+    expect(startTimeoutMs({ FC2MP4_START_TIMEOUT_S: '90' })).toBe(90_000);
+    expect(startTimeoutMs({})).toBe(20_000);
+    for (const bad of ['', 'abc', '0', '-5', '1.5x']) expect(startTimeoutMs({ FC2MP4_START_TIMEOUT_S: bad })).toBe(20_000);
   });
 
   it('reports an emulator that exits before the first frame', async () => {

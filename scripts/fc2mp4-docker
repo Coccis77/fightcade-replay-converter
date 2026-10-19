@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# fc2mp4-docker: fc2mp4 in Docker, with the same arguments as fc2mp4 (Linux and macOS).
+#   ./fc2mp4-docker https://replay.fightcade.com/fbneo/garou/<id> [-o <file or folder>] [other fc2mp4 options]
+# Finds Fightcade like fc2mp4 does (or --fightcade-dir), mounts it read-only, mounts the videos folder,
+# and runs the image of the same release. https://github.com/Coccis77/fightcade-replay-converter
+set -euo pipefail
+
+VERSION="__FC2MP4_VERSION__" # set when released; a copy from the repository uses :latest
+case "$VERSION" in __*) VERSION=latest ;; esac
+IMAGE="${FC2MP4_IMAGE:-ghcr.io/coccis77/fc2mp4:$VERSION}"
+
+fail() {
+  echo "Error: $1" >&2
+  if [ -n "${2:-}" ]; then echo "Hint: $2" >&2; fi
+  exit "${3:-3}"
+}
+absolute() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$PWD" "$1" ;; esac; }
+
+args=()
+output=""
+fightcade="${FC2MP4_FIGHTCADE_DIR:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o | --output) [ $# -ge 2 ] || fail "$1 needs a file or folder" "" 2; output="$2"; shift 2 ;;
+    --output=*) output="${1#--output=}"; shift ;;
+    --fightcade-dir) [ $# -ge 2 ] || fail "--fightcade-dir needs a folder" "" 2; fightcade="$2"; shift 2 ;;
+    --fightcade-dir=*) fightcade="${1#--fightcade-dir=}"; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+
+os="$(uname)"
+
+# Fightcade: --fightcade-dir / FC2MP4_FIGHTCADE_DIR, else where Fightcade is usually installed.
+if [ -z "$fightcade" ]; then
+  if [ "$os" = Darwin ]; then
+    candidates=(/Applications/FightCade2.app "$HOME/Applications/FightCade2.app")
+  else
+    candidates=("$HOME/Fightcade" "$HOME/fightcade" /opt/fightcade)
+  fi
+  for candidate in "${candidates[@]}"; do
+    if [ -e "$candidate" ]; then fightcade="$candidate"; break; fi
+  done
+  [ -n "$fightcade" ] || fail "Fightcade not found (looked in ${candidates[*]})" "Pass --fightcade-dir <your Fightcade folder>"
+fi
+fightcade="$(absolute "${fightcade%/}")"
+# FightCade2.app (macOS): its emulator folder lives in Contents/MacOS.
+case "$fightcade" in *.app) fightcade="$fightcade/Contents/MacOS" ;; esac
+if [ ! -e "$fightcade/emulator/fbneo/ggponet.dll" ] && [ ! -e "$fightcade/ggponet.dll" ]; then
+  fail "No Fightcade files in $fightcade" "Pass --fightcade-dir: a Fightcade folder (or FightCade2.app), or its emulator/fbneo folder"
+fi
+
+# Docker Desktop (macOS) only mounts folders it shares; /Applications (FightCade2.app) is not shared by
+# default. FC2MP4_DOCKER_SHARED (tests) > the list in Docker Desktop's settings > Docker's defaults.
+if [ "$os" = Darwin ]; then
+  shared="${FC2MP4_DOCKER_SHARED:-}"
+  settings="$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+  if [ -z "$shared" ] && [ -r "$settings" ]; then
+    shared="$(tr -d '\n' < "$settings" | sed -n 's/.*"FilesharingDirectories"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' | tr -d '" ' | tr ',' ':')"
+  fi
+  shared="${shared:-/Users:/Volumes:/private:/tmp:/var/folders}"
+  is_shared=no
+  old_ifs="$IFS"; IFS=:
+  for root in $shared; do
+    case "$fightcade" in "$root" | "$root"/*) is_shared=yes ;; esac
+  done
+  IFS="$old_ifs"
+  if [ "$is_shared" = no ]; then
+    fail "Docker Desktop doesn't share $fightcade with containers" \
+      "Add its folder (e.g. /Applications) in Docker Desktop → Settings → Resources → File sharing, or use fc2mp4-macos-arm64 (native, much faster on Apple Silicon)"
+  fi
+fi
+
+# Videos: -o's folder (or -o itself when it is a folder), else FC2MP4_OUTPUT_DIR or the usual folder.
+container_output=()
+if [ -z "$output" ]; then
+  videos="${FC2MP4_OUTPUT_DIR:-}"
+  if [ -z "$videos" ]; then
+    if [ "$os" = Darwin ]; then videos="$HOME/Movies/Fightcade"; else videos="$HOME/Videos/Fightcade"; fi
+  fi
+elif [ -d "$output" ] || [ "${output%/}" != "$output" ]; then
+  videos="$output"
+  container_output=(-o /videos/)
+else
+  videos="$(dirname "$output")"
+  container_output=(-o "/videos/$(basename "$output")")
+fi
+mkdir -p "$videos"
+videos="$(cd "$videos" && pwd)"
+
+# The image runs as user 1000 (its Wine setup belongs to that user). Docker Desktop on macOS maps the
+# files to you; on Linux they belong to user 1000, which is you on most single-user machines.
+if [ "$os" != Darwin ] && [ "$(id -u)" != 1000 ]; then
+  echo "Note: the videos will belong to user 1000 (the image's user). Afterwards: sudo chown \"\$USER\" \"$videos\"/*.mp4" >&2
+fi
+
+tty=()
+if [ -t 2 ]; then tty=(-t); fi # live progress line when run in a terminal
+
+# On an ARM machine the x86 image runs emulated and Wine starts slowly: more time for the replay to start.
+slow=()
+case "$(uname -m)" in arm64 | aarch64) slow=(-e FC2MP4_START_TIMEOUT_S=90) ;; esac
+
+exec docker run --rm --platform linux/amd64 ${tty[@]+"${tty[@]}"} \
+  -v "$fightcade:/fightcade:ro" \
+  -v "$videos:/videos" \
+  -e "FC2MP4_HOST_VIDEOS=$videos" ${slow[@]+"${slow[@]}"} \
+  "$IMAGE" ${args[@]+"${args[@]}"} ${container_output[@]+"${container_output[@]}"}

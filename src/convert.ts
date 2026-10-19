@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { capture, defaultCaptureDeps, type CaptureOptions, type CaptureResult } from './capture.js';
+import { capture, defaultCaptureDeps, startTimeoutMs, type CaptureOptions, type CaptureResult } from './capture.js';
 import type { FrameFormat } from './constants.js';
 import { emulatorDir, localBuild } from './emulatorBuild.js';
 import { defaultReleaseDeps, ensureEmulator, type EnsureResult } from './emulatorRelease.js';
@@ -161,6 +161,7 @@ export async function convert(input: string | ReplayRef, options: ConvertOptions
       game: ref.game,
       scale: options.scale,
       encoder,
+      startTimeoutMs: startTimeoutMs(),
       maxDurationMs: options.maxDurationMs,
       signal: options.signal,
       onProgress: (frames, seconds, elapsedMs) => options.onProgress?.({ phase: 'capturing', frames, seconds, elapsedMs }),

@@ -2,6 +2,7 @@
 import { formatReplayLength, parseCli, prepareMessage, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
+import { hostPath } from './hostPath.js';
 import { installSignalHandlers, stopOnStdinClose } from './signals.js';
 
 declare const __FC2MP4_VERSION__: string | undefined;
@@ -67,13 +68,13 @@ async function main(): Promise<number> {
     });
     if (tty) process.stderr.write('\n');
     process.stderr.write(`Captured ${formatReplayLength(result.seconds)} of replay.\n`);
-    process.stdout.write(`${result.output}\n`);
+    process.stdout.write(`${hostPath(result.output)}\n`);
     return 0;
   } catch (err) {
     if (tty) process.stderr.write('\n');
     if (err instanceof ConvertError) {
-      process.stderr.write(`Error: ${err.message}\n`);
-      if (err.hint) process.stderr.write(`Hint: ${err.hint}\n`);
+      process.stderr.write(`Error: ${hostPath(err.message)}\n`);
+      if (err.hint) process.stderr.write(`Hint: ${hostPath(err.hint)}\n`);
       return err.exitCode;
     }
     process.stderr.write(`Unexpected error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);

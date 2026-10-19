@@ -112,21 +112,28 @@ Videos go to `~/Videos/Fightcade`.
 
 ## Docker
 
-A ready-to-use image is published with every release (x86-64; on Apple Silicon Macs use the native
-binary instead, Docker would emulate it slowly). Fightcade's files are not in the image: mount your
-own Fightcade folder (or its `emulator/fbneo` folder) read-only.
+`fc2mp4-docker` (on the release page) runs fc2mp4 in Docker with the same arguments, on Linux and macOS,
+without installing Wine or ffmpeg:
 
-```bash
-mkdir -p videos   # create it first: a folder Docker creates belongs to root, and the container can't write to it
-docker run --rm \
-  -v /path/to/Fightcade:/fightcade:ro \
-  -v "$PWD/videos":/videos \
-  ghcr.io/coccis77/fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/<id>
+```sh
+chmod +x fc2mp4-docker
+./fc2mp4-docker https://replay.fightcade.com/fbneo/sfiii3nr1/<id>
+./fc2mp4-docker https://replay.fightcade.com/fbneo/garou/<id> -o ~/clips/match.mp4 --encoder x264
 ```
 
-The MP4 lands in `./videos/`, named `<game> - <player 1> vs <player 2> - <date> - <id>.mp4`. Every option works (`--scale`, `--max-duration`, `-o`, `-v`).
-The container runs as uid 1000: the `videos` folder must be writable by that user (on most single-user
-Linux machines, that is you). Pin a version with `ghcr.io/coccis77/fc2mp4:<version>`.
+It finds Fightcade like fc2mp4 does (or use `--fightcade-dir`), mounts it read-only, saves the video in
+`~/Videos/Fightcade` (`~/Movies/Fightcade` on macOS) or where `-o` says, and uses the Docker image of
+its own release. The image is x86-64: on Apple Silicon Macs the native `fc2mp4-macos-arm64` is much
+faster. On Linux the videos belong to user 1000 (the image's user), which is you on most single-user
+machines.
+
+Without the script:
+
+```bash
+mkdir -p videos   # create it first: a folder Docker creates belongs to root
+docker run --rm -v /path/to/Fightcade:/fightcade:ro -v "$PWD/videos":/videos \
+  ghcr.io/coccis77/fc2mp4 https://replay.fightcade.com/fbneo/sfiii3nr1/<id>
+```
 
 Without Docker, `fc2mp4 prepare` does the same one-time setup (emulator download, Wine environment)
 ahead of the first conversion. `FC2MP4_OUTPUT_DIR` sets the default output folder.

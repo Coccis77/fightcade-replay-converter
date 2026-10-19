@@ -38,6 +38,7 @@ export interface CaptureOptions {
   game: string; // for messages (a vertical game is refused by name)
   scale: ScaleMode;
   encoder?: EncoderName; // x264 when not set
+  startTimeoutMs?: number; // how long the replay may take to start (TIMEOUTS.firstFrameMs when not set)
   maxDurationMs: number;
   signal?: AbortSignal;
   onProgress?: (frames: number, seconds: number, elapsedMs: number) => void;
@@ -92,6 +93,13 @@ export function sweepProcessGroup(pid: number): void {
   } catch {
     // group already empty
   }
+}
+
+// FC2MP4_START_TIMEOUT_S: more time for the replay to start where Wine itself is slow (fc2mp4-docker sets
+// it when the x86 image runs emulated, e.g. on Apple Silicon: Wine alone took 13.6 s there).
+export function startTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const seconds = /^\d+$/.test(env.FC2MP4_START_TIMEOUT_S ?? '') ? Number(env.FC2MP4_START_TIMEOUT_S) : 0;
+  return seconds > 0 ? seconds * 1000 : TIMEOUTS.firstFrameMs;
 }
 
 export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<CaptureResult> {
@@ -163,7 +171,7 @@ export async function capture(deps: CaptureDeps, opts: CaptureOptions): Promise<
       if (format !== null && now - lastProgressAt >= TIMEOUTS.stallMs) {
         throw new ConvertError(ExitCode.Recording, `The capture stalled: no new frame for ${TIMEOUTS.stallMs / 1000} s`, 'The emulator may be stuck; try again (use -v for details)');
       }
-      if (format === null && elapsed >= TIMEOUTS.firstFrameMs) {
+      if (format === null && elapsed >= (opts.startTimeoutMs ?? TIMEOUTS.firstFrameMs)) {
         throw new ConvertError(ExitCode.Recording, "This replay didn't start: the link may be wrong, or Fightcade's replay server didn't answer", 'Check the link (a quark ID alone means a 3rd Strike replay)');
       }
       if (elapsed >= opts.maxDurationMs) {
