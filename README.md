@@ -28,9 +28,6 @@ It installs for your Windows account (no administrator rights needed) and adds *
 Start menu. ffmpeg and the emulator are downloaded on the first conversion. When a new version is out,
 fc2mp4 offers to update itself.
 
-Coming from the older two files `fc2mp4.exe` + `fc2mp4-ui.exe`: run the installer, then delete them.
-Your settings are kept.
-
 ### macOS
 
 Apple Silicon (M1 and later). Install ffmpeg with [Homebrew](https://brew.sh), then download fc2mp4:
