@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReplayLength, parseCli, parseDuration, prepareMessage, USAGE } from '../src/cliArgs.js';
+import { doneLine, formatReplayLength, parseCli, parseDuration, prepareMessage, USAGE } from '../src/cliArgs.js';
 import { ExitCode } from '../src/errors.js';
 import { DEFAULT_MAX_DURATION_MS } from '../src/constants.js';
 
@@ -95,6 +95,17 @@ describe('formatReplayLength', () => {
     expect(formatReplayLength(549.7)).toBe('9:10');
     expect(formatReplayLength(600)).toBe('10:00');
     expect(formatReplayLength(0)).toBe('0:00');
+  });
+});
+
+describe('doneLine', () => {
+  it('says how long the conversion took and how many times faster than real time', () => {
+    expect(doneLine(137.9, 40_600)).toBe('Captured 2:18 of replay in 0:41 (3.4× real time).');
+    expect(doneLine(600, 500_000)).toBe('Captured 10:00 of replay in 8:20 (1.2× real time).');
+  });
+
+  it('does not divide by zero', () => {
+    expect(doneLine(0, 0)).toBe('Captured 0:00 of replay in 0:00.');
   });
 });
 

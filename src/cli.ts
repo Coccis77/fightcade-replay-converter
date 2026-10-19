@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { formatReplayLength, parseCli, prepareMessage, USAGE } from './cliArgs.js';
+import { doneLine, parseCli, prepareMessage, USAGE } from './cliArgs.js';
 import { buildEmulatorLocally, convert, prepare, updateEmulator, type ProgressEvent } from './convert.js';
 import { ConvertError, ExitCode } from './errors.js';
 import { hostPath } from './hostPath.js';
@@ -55,6 +55,7 @@ async function main(): Promise<number> {
       return result.warning ? ExitCode.Emulator : 0;
     }
     if (request.stopOnStdinClose) stopWatchingStdin = stopOnStdinClose(process.stdin, controller, (msg) => process.stderr.write(msg));
+    const startedAt = Date.now();
     const result = await convert(request.input, {
       output: request.output,
       scale: request.scale,
@@ -67,7 +68,7 @@ async function main(): Promise<number> {
       onProgress: (e) => process.stderr.write(tty ? `\r\x1b[K${progressLine(e)}` : `${progressLine(e)}\n`),
     });
     if (tty) process.stderr.write('\n');
-    process.stderr.write(`Captured ${formatReplayLength(result.seconds)} of replay.\n`);
+    process.stderr.write(`${doneLine(result.seconds, Date.now() - startedAt)}\n`);
     process.stdout.write(`${hostPath(result.output)}\n`);
     return 0;
   } catch (err) {

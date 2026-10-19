@@ -44,6 +44,12 @@ export function formatReplayLength(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
+// The last line of a conversion: the whole run's time (startup included) and its speed.
+export function doneLine(replaySeconds: number, elapsedMs: number): string {
+  const took = `Captured ${formatReplayLength(replaySeconds)} of replay in ${formatReplayLength(elapsedMs / 1000)}`;
+  return elapsedMs > 0 ? `${took} (${((replaySeconds * 1000) / elapsedMs).toFixed(1)}× real time).` : `${took}.`;
+}
+
 const UNIT_MS = { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
 
 export function parseDuration(text: string): number {
