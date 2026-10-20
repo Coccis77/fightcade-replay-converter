@@ -28,6 +28,7 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\fc2mp4.exe
+SetupIconFile=..\assets\fc2mp4.ico
 UninstallDisplayName=fc2mp4
 
 [Tasks]

@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" alt="fc2mp4" width="200"></p>
+
 # fc2mp4
 
 Turns a Fightcade replay into an MP4 video (1440×1080, H.264/AAC), faster than real time.

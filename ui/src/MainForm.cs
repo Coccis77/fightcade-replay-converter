@@ -20,7 +20,7 @@ namespace Fc2mp4Ui
         readonly ConversionRunner runner = new ConversionRunner();
         readonly RunState state = new RunState();
         readonly List<Button> browseButtons = new List<Button>();
-        readonly NotifyIcon notifier = new NotifyIcon { Icon = SystemIcons.Application, Text = "fc2mp4" };
+        readonly NotifyIcon notifier = new NotifyIcon { Icon = AppIcon(SystemInformation.SmallIconSize), Text = "fc2mp4" };
 
         // Wraps, and the text is capped, so the buttons ("Download from GitHub" after a failure) stay visible.
         readonly FlowLayoutPanel updateBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Visible = false, BackColor = SystemColors.Info, Padding = new Padding(4), WrapContents = true };
@@ -63,9 +63,20 @@ namespace Fc2mp4Ui
         bool updating;
         string updateError;
 
+        // The logo, embedded in the exe; Size.Empty keeps every size (title bar, taskbar, Alt+Tab).
+        static Icon AppIcon(Size size)
+        {
+            using (var stream = typeof(MainForm).Assembly.GetManifestResourceStream("fc2mp4.ico"))
+            {
+                if (stream == null) return SystemIcons.Application;
+                return size.IsEmpty ? new Icon(stream) : new Icon(stream, size);
+            }
+        }
+
         public MainForm()
         {
             Text = "fc2mp4";
+            Icon = AppIcon(Size.Empty);
             MinimumSize = new Size(640, 560);
             Size = new Size(900, 800);
             StartPosition = FormStartPosition.CenterScreen;

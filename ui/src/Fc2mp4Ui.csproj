@@ -8,7 +8,12 @@
     <!-- CI passes -p:Version=<package.json version>; 0.0.0 marks a local build (no version check). -->
     <Version>0.0.0</Version>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- assets/fc2mp4.ico is made from assets/logo.png (magick logo.png -define icon:auto-resize=256,64,48,40,32,24,20,16 fc2mp4.ico). -->
+    <ApplicationIcon>..\..\assets\fc2mp4.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\fc2mp4.ico" LogicalName="fc2mp4.ico" />
+  </ItemGroup>
   <ItemGroup>
     <!-- Builds the .NET Framework app on any OS, without the Windows desktop SDK. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
