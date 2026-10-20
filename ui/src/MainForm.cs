@@ -78,7 +78,8 @@ namespace Fc2mp4Ui
             encoder.Items.AddRange(Encoders.Labels);
             encoder.SelectedIndex = Array.IndexOf(Encoders.Names, settings.Encoder);
             encoderHelp.Text = Encoders.Describe(settings.Encoder);
-            encoder.SelectedIndexChanged += (s, e) => encoderHelp.Text = Encoders.Describe(SelectedEncoder());
+            // Remembered as soon as it changes, so the next start uses it even without a conversion.
+            encoder.SelectedIndexChanged += (s, e) => { encoderHelp.Text = Encoders.Describe(SelectedEncoder()); SaveSettings(); };
             versionLabel.Text = Updater.VersionLabel(windowVersion);
             startNotice = Updater.UpdatedNotice(settings.LastVersion, windowVersion);
             settings.LastVersion = Updater.VersionText(windowVersion);
@@ -253,7 +254,7 @@ namespace Fc2mp4Ui
             ShowUpdateBar();
         }
 
-        string SelectedEncoder() => encoder.SelectedIndex >= 0 ? Encoders.Names[encoder.SelectedIndex] : "auto";
+        string SelectedEncoder() => encoder.SelectedIndex >= 0 ? Encoders.Names[encoder.SelectedIndex] : "x264";
 
         void SaveSettings()
         {

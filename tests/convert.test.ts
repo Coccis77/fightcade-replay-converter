@@ -35,10 +35,6 @@ function harness(over: Partial<ConvertDeps> = {}) {
       calls.push(signal ? 'ffmpeg:signal' : 'ffmpeg');
       return '/usr/bin/ffmpeg';
     },
-    resolveEncoder: async (choice) => {
-      calls.push(`encoder:${choice}`);
-      return choice === 'auto' ? 'nvenc' : choice;
-    },
     ensureEmulator: async (_install, opts) => {
       calls.push(`ensure:${opts.force}:${opts.local}`);
       return { updated: false };
@@ -79,19 +75,18 @@ describe('convert', () => {
     const result = await convert(`https://replay.fightcade.com/fbneo/sfiii3nr1/${ID}`, baseOptions, deps);
     expect(result).toEqual({ output: `/out/${ID}.mp4`, frames: 8220, seconds: (8220 * 100) / 5959, endReason: 'ended' });
     expect(calls).toEqual([
-      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'encoder:auto', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`, 'capture-encoder:nvenc',
+      'lock', 'preflight', 'roms:sfiii3nr1', 'writable:/out', 'ffmpeg', 'ensure:false:false', 'runtime:false', 'wine', 'tmp', `capture:sfiii3nr1:${ID}:/tmp/run`, 'capture-encoder:x264',
       'mkdir:/out', `mux:/out/${ID}.mp4:5959`, 'rmdir:/tmp/run', 'unlock',
     ]);
   });
 
-  it('captures with the encoder auto resolved to, or the one asked for', async () => {
-    const auto = harness();
-    await convert(ID, baseOptions, auto.deps);
-    expect(auto.calls).toContain('capture-encoder:nvenc');
-    const forced = harness();
-    await convert(ID, { ...baseOptions, encoder: 'x264' }, forced.deps);
-    expect(forced.calls).toContain('encoder:x264');
-    expect(forced.calls).toContain('capture-encoder:x264');
+  it('captures with x264 by default, or the encoder asked for', async () => {
+    const byDefault = harness();
+    await convert(ID, baseOptions, byDefault.deps);
+    expect(byDefault.calls).toContain('capture-encoder:x264');
+    const asked = harness();
+    await convert(ID, { ...baseOptions, encoder: 'nvenc' }, asked.deps);
+    expect(asked.calls).toContain('capture-encoder:nvenc');
   });
 
   it('names a video saved to a folder after the game, the players, the date and the quark ID', async () => {

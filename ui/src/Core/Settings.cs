@@ -11,7 +11,7 @@ namespace Fc2mp4Ui
     {
         public string FightcadeFolder { get; set; } = "";
         public string OutputFolder { get; set; } = "";
-        public string Encoder { get; set; } = "auto";
+        public string Encoder { get; set; } = "x264";
         public string LastVersion { get; set; } = "";
         public string Window { get; set; } = "";
         public int Divider { get; set; }

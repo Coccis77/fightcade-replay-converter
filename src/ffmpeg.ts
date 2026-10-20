@@ -12,36 +12,10 @@ export const VIDEO_FILTERS: Record<ScaleMode, string> = {
   smooth: 'format=yuv444p,scale=1440:1080:flags=lanczos,setsar=1',
 };
 
-// x264 runs on the CPU everywhere; the others are hardware encoders (NVIDIA, Intel QuickSync, AMD,
-// Windows Media Foundation, macOS), each set for about the same quality as x264's crf 20.
+// x264 (the default) runs on the CPU everywhere; the others are hardware encoders (NVIDIA, Intel
+// QuickSync, AMD, Windows Media Foundation, macOS), each set for about the same quality as x264's crf 20.
 export const ENCODERS = ['x264', 'nvenc', 'qsv', 'amf', 'mf', 'videotoolbox'] as const;
 export type EncoderName = (typeof ENCODERS)[number];
-// auto: NVENC on Windows when the computer has it (25% faster, measured), otherwise x264.
-export const ENCODER_CHOICES = ['auto', ...ENCODERS] as const;
-export type EncoderChoice = (typeof ENCODER_CHOICES)[number];
-
-// One tiny black frame through the encoder: fails at once without the GPU or its driver.
-export function probeArgs(encoder: EncoderName): string[] {
-  return ['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=256x144:r=30', '-frames:v', '1', ...encoderArgs(encoder), '-f', 'null', '-'];
-}
-
-export async function resolveEncoder(choice: EncoderChoice, platform: NodeJS.Platform, works: (encoder: EncoderName) => Promise<boolean>): Promise<EncoderName> {
-  if (choice !== 'auto') return choice;
-  if (platform === 'win32' && (await works('nvenc'))) return 'nvenc';
-  return 'x264';
-}
-
-export function probeEncoder(encoder: EncoderName, ffmpeg = 'ffmpeg'): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn(ffmpeg, probeArgs(encoder), { stdio: 'ignore' });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
-    child.on('error', () => resolve(false));
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
-    });
-  });
-}
 
 export function encoderArgs(encoder: EncoderName): string[] {
   switch (encoder) {

@@ -13,17 +13,21 @@ namespace Fc2mp4Ui.Tests
             var s = Settings.Load(TempFile(), @"C:\Videos\Fightcade");
             Assert.Equal("", s.FightcadeFolder);
             Assert.Equal(@"C:\Videos\Fightcade", s.OutputFolder);
-            Assert.Equal("auto", s.Encoder);
+            Assert.Equal("x264", s.Encoder);
             Assert.Equal("", s.LastVersion);
         }
 
         [Fact]
-        public void AnUnknownEncoderFallsBackToAutomatic()
+        public void AnUnknownOrRemovedEncoderFallsBackToX264()
         {
             string path = TempFile();
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, "encoder=divx\n");
-            Assert.Equal("auto", Settings.Load(path, "o").Encoder);
+            Assert.Equal("x264", Settings.Load(path, "o").Encoder);
+            File.WriteAllText(path, "encoder=auto\n"); // the old automatic choice
+            Assert.Equal("x264", Settings.Load(path, "o").Encoder);
+            File.WriteAllText(path, "encoder=nvenc\n");
+            Assert.Equal("nvenc", Settings.Load(path, "o").Encoder);
         }
 
         [Fact]

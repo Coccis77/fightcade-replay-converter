@@ -158,7 +158,7 @@ The same on every system (the Windows window has them under **Settings**).
 | --- | --- |
 | `-o <file or folder>` | Where to write the video. Default: the videos folder above, or `FC2MP4_OUTPUT_DIR`. |
 | `--fightcade-dir <path>` | Where Fightcade is, when fc2mp4 doesn't find it. |
-| `--encoder <name>` | Video encoder, see below. Default: `auto`. |
+| `--encoder <name>` | Video encoder, see below. Default: `x264`. |
 | `--scale sharp\|smooth` | Upscaling style. Default: `sharp`. |
 | `--max-duration <d>` | Stop after this long: `90s`, `45m`, `1h`. Default: `60m`. |
 | `-v` | Print debug details. |
@@ -170,11 +170,11 @@ name is used as is.
 
 Encoders:
 
-- `auto`: `nvenc` on Windows when there is an NVIDIA graphics card, `x264` otherwise.
-- `x264`: your processor; works everywhere.
+- `x264` (the default): your processor; works everywhere, the smallest files.
 - `nvenc` (NVIDIA), `qsv` (Intel), `amf` (AMD), `mf` (Windows, any graphics card), `videotoolbox`
-  (macOS): your graphics card. Same quality, usually faster (`nvenc` about 25%), files slightly bigger.
-  If one isn't available on your computer, fc2mp4 says so.
+  (macOS): your graphics card. Same quality, slightly bigger files; faster only with a good graphics
+  card (`nvenc` was about 25% faster on a recent NVIDIA card). If one isn't available on your computer,
+  fc2mp4 says so. The Windows window remembers your choice.
 
 ## Supported games
 
