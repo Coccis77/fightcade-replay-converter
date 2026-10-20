@@ -82,8 +82,8 @@ Open **fc2mp4** from the Start menu.
    background, Windows tells you when it's done.
 
 Videos go to `Videos\Fightcade` in your user folder. **Settings** has the Fightcade folder, the videos
-folder and the encoder; they are remembered. Leave *Fightcade folder* empty unless fc2mp4 doesn't find
-Fightcade by itself.
+folder and the [encoder](#options) (x264 by default); they are remembered. Leave *Fightcade folder*
+empty unless fc2mp4 doesn't find Fightcade by itself.
 
 **From PowerShell:** the installer also puts the command-line tool `fc2mp4-cli.exe` next to the window
 (the release page offers it on its own too):
@@ -170,11 +170,20 @@ name is used as is.
 
 Encoders:
 
-- `x264` (the default): your processor; works everywhere, the smallest files.
-- `nvenc` (NVIDIA), `qsv` (Intel), `amf` (AMD), `mf` (Windows, any graphics card), `videotoolbox`
-  (macOS): your graphics card. Same quality, slightly bigger files; faster only with a good graphics
-  card (`nvenc` was about 25% faster on a recent NVIDIA card). If one isn't available on your computer,
-  fc2mp4 says so. The Windows window remembers your choice.
+| Encoder | Uses |
+| --- | --- |
+| `x264` (default) | your processor, on every system |
+| `nvenc` | an NVIDIA graphics card |
+| `qsv` | Intel graphics |
+| `amf` | an AMD graphics card |
+| `mf` | any graphics card, through Windows (Windows only) |
+| `videotoolbox` | the Mac's video encoder (macOS only) |
+
+x264 works on every computer and makes the smallest files. A graphics-card encoder gives the same
+quality with slightly bigger files, and is faster only when the graphics card is better than the
+processor: `nvenc` was about 25% faster on a recent NVIDIA card, `videotoolbox` was slower on an M2 Pro.
+Try one on your computer and compare the time on the last line (`Captured 2:18 of replay in 0:29 …`).
+If an encoder isn't available on your computer, fc2mp4 says so.
 
 ## Supported games
 
