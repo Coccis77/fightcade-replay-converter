@@ -2,7 +2,15 @@ import os
 import tempfile
 import unittest
 
-from build import cache_key, fc2mp4_sources
+from build import COMPILE_FLAGS, cache_key, fc2mp4_sources
+
+
+class CompileFlagsTest(unittest.TestCase):
+    def test_floating_point_matches_fightcades_msvc_build(self):
+        # MSVC's 32-bit default is SSE2; MinGW's x87 rounds differently and desyncs replays
+        # (Breakers Revenge: wrong stage from the first round).
+        self.assertIn('-msse2', COMPILE_FLAGS)
+        self.assertIn('-mfpmath=sse', COMPILE_FLAGS)
 
 
 class CacheKeyTest(unittest.TestCase):

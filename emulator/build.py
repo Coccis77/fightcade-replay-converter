@@ -24,6 +24,9 @@ EXE_NAME = 'fcadefbneo-fc2mp4.exe'
 CC = 'i686-w64-mingw32-gcc'
 CXX = 'i686-w64-mingw32-g++'
 WINDRES = 'i686-w64-mingw32-windres'
+# SSE2 floating point, as Fightcade's MSVC build (32-bit default): MinGW's x87 default rounds
+# differently and desyncs some replays (Breakers Revenge: wrong stage from the first round).
+COMPILE_FLAGS = ['-O2', '-m32', '-msse2', '-mfpmath=sse', '-w', '-fno-strict-aliasing']
 EXIT_PATCH, EXIT_BUILD, EXIT_FETCH = 2, 3, 4
 
 PERL_GENERATORS = [
@@ -205,7 +208,7 @@ def compile_all(source_root, obj, gen, sources, includes, defines, jobs, shims):
             return None
         os.makedirs(os.path.dirname(out), exist_ok=True)
         is_c = src.endswith('.c')
-        cmd = [CC if is_c else CXX, '-c', src, '-o', out, '-O2', '-m32', '-w', '-fno-strict-aliasing',
+        cmd = [CC if is_c else CXX, '-c', src, '-o', out, *COMPILE_FLAGS,
                '-std=gnu99' if is_c else '-std=gnu++17', '-DUNICODE', '-D_UNICODE', '-D__fastcall=', '-DFASTCALL=']
         if not is_c:
             cmd.append('-fpermissive')
