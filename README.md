@@ -78,6 +78,8 @@ The image is x86-64: on Apple Silicon it runs emulated and is much slower than t
 
 Open **fc2mp4** from the Start menu.
 
+![The fc2mp4 window after converting three replays](assets/01.png)
+
 1. Paste one or more replay links, one per line.
 2. Press **Convert**. The links are converted one after the other; the console shows the progress.
 3. **Open video** opens the last video, **Open folder** the folder. If the window is in the
