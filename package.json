@@ -1,6 +1,6 @@
 {
   "name": "fc2mp4",
-  "version": "0.20.2",
+  "version": "0.20.3",
   "description": "Convert Fightcade FBNeo replays to MP4",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
